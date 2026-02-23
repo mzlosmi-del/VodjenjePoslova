@@ -237,7 +237,51 @@ function RadioGroup({label, value, onChange, options, readOnly}) {
   );
 }
 
-function KupacSearchField({label, sifra, naziv, kupci, onChange}) {
+function UserSearchField({label, value, onChange, users}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const base = {width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",colorScheme:"dark"};
+  const filtered = users.filter(u => {
+    const full = `${u.ime||""} ${u.prezime||""}`.toLowerCase();
+    return full.includes(search.toLowerCase());
+  });
+  return (
+    <div style={{marginBottom:14,position:"relative"}}>
+      <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:4,fontFamily:T.fontBody}}>{label}</label>
+      <div onClick={()=>setOpen(o=>!o)} style={{...base,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",userSelect:"none"}}>
+        <span style={{color:value?T.text:T.textSoft}}>{value||"— Izaberi korisnika —"}</span>
+        <span style={{color:T.textSoft,fontSize:11,transform:open?"rotate(180deg)":"none",transition:"transform 0.15s"}}>▼</span>
+      </div>
+      {open && (
+        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,zIndex:3000,boxShadow:T.shadowMd,overflow:"hidden"}}>
+          <div style={{padding:"8px 8px 5px"}}>
+            <input autoFocus placeholder="Pretraži..." value={search} onChange={e=>setSearch(e.target.value)} onClick={e=>e.stopPropagation()}
+              style={{...base,fontSize:12}}/>
+          </div>
+          <div style={{maxHeight:200,overflowY:"auto"}}>
+            {filtered.length===0
+              ? <div style={{padding:"10px 14px",color:T.textSoft,fontSize:13}}>Nema rezultata</div>
+              : filtered.map(u=>{
+                const full = `${u.ime||""} ${u.prezime||""}`.trim();
+                return (
+                  <div key={u.id} onClick={()=>{onChange(full);setOpen(false);setSearch("");}}
+                    style={{padding:"9px 14px",cursor:"pointer",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.surfaceHover}
+                    onMouseLeave={e=>e.currentTarget.style.background=""}>
+                    <span style={{color:T.text,fontSize:13,fontWeight:500}}>{full}</span>
+                    {u.is_admin && <span style={{color:T.primary,fontSize:11,fontWeight:600}}>Admin</span>}
+                  </div>
+                );
+              })
+            }
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
   const [open,setOpen]=useState(false);
   const [search,setSearch]=useState("");
   const base={width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",colorScheme:"dark"};
@@ -749,7 +793,7 @@ export default function App() {
     setLoading(true);
     Promise.all([loadPoslovi(), loadKupci(), loadIzradaOptions()])
       .finally(()=>setLoading(false));
-    if (profile.is_admin) loadUsers();
+    loadUsers();
   },[profile]);
 
   // ── derived ──────────────────────────────────────────────────────────────────
@@ -780,8 +824,9 @@ export default function App() {
   async function openNewPosao() {
     const {data} = await sb.from("poslovi").select("posao_num").order("posao_num",{ascending:false}).limit(1);
     const n = data&&data.length>0 ? data[0].posao_num+1 : 1;
+    const defaultUnosilac = profile ? `${profile.ime||""} ${profile.prezime||""}`.trim() : "";
     setNewPosao(true);
-    setTempData({posaoNum:n,Posao:formatPosaoNumber(n),KLIJENT:"",SifraKupca:"",DatumUnosa:todayISO(),RokZaIsporuku:"",Unosilac:"",Opis:"",PoslatiNaIzradu:"",MontazaIsporuka:"",Placanje:"Faktura",StatusIzrade:false,StatusIsporuke:false,StatusMontaze:false,SpecifikacijaCene:"",Obracun:"",ZavrsenPosao:false,Fakturisano:false});
+    setTempData({posaoNum:n,Posao:formatPosaoNumber(n),KLIJENT:"",SifraKupca:"",DatumUnosa:todayISO(),RokZaIsporuku:"",Unosilac:defaultUnosilac,Opis:"",PoslatiNaIzradu:"",MontazaIsporuka:"",Placanje:"Faktura",StatusIzrade:false,StatusIsporuke:false,StatusMontaze:false,SpecifikacijaCene:"",Obracun:"",ZavrsenPosao:false,Fakturisano:false});
     setTempErrors({});
   }
   async function savePosao() {
@@ -893,7 +938,7 @@ export default function App() {
       <DateField label="Datum unosa" value={tempData.DatumUnosa} onChange={tf("DatumUnosa")} readOnly={!!newPosao}/>
       <KupacSearchField label="Klijent" sifra={tempData.SifraKupca} naziv={tempData.KLIJENT} kupci={kupci} onChange={k=>setTempData(d=>({...d,SifraKupca:k.SifraKupca,KLIJENT:k.Naziv}))}/>
       <DateField label="Rok za isporuku" value={tempData.RokZaIsporuku} onChange={tf("RokZaIsporuku")}/>
-      <Field label="Unosilac posla" value={tempData.Unosilac} onChange={tf("Unosilac")}/>
+      <UserSearchField label="Unosilac posla" value={tempData.Unosilac} onChange={tf("Unosilac")} users={users}/>
       <div style={{gridColumn:"1/-1"}}><Field label="Opis" value={tempData.Opis} onChange={tf("Opis")}/></div>
       <div style={{gridColumn:"1/-1"}}><Field label="Specifikacija cene (slobodan tekst)" value={tempData.SpecifikacijaCene} onChange={tf("SpecifikacijaCene")}/></div>
       <Field label="Obračun (RSD)" value={tempData.Obracun} onChange={tf("Obracun")} type="number"/>
