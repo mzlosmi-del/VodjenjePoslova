@@ -411,9 +411,7 @@ function useTableControls(viewKey, defaultCols) {
   };
 
   const thDraggable = (col) => ({
-    ...thS,
-    cursor:"pointer",
-    userSelect:"none",
+    style: { ...thS, cursor:"pointer", userSelect:"none" },
     draggable: true,
     onDragStart: () => onDragStart(col.key),
     onDragOver: e => e.preventDefault(),
