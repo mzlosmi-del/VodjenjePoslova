@@ -571,6 +571,62 @@ function SimpleTable({rows, viewKey, columns, renderCell, emptyMsg="Nema zapisa"
   );
 }
 
+// ── KUPCI VIEW (needs its own component so hooks work correctly) ───────────────
+const KUPCI_COLS_DEFAULT = [
+  {key:"SifraKupca",label:"Šifra",visible:true},{key:"Naziv",label:"Naziv",visible:true},
+  {key:"Grad",label:"Grad",visible:true},{key:"Ulica",label:"Ulica",visible:true},
+  {key:"Broj",label:"Br.",visible:true},{key:"PostanskiBroj",label:"Poštanski",visible:true},
+  {key:"Telefon",label:"Telefon",visible:true},{key:"PIB",label:"PIB",visible:true},
+];
+
+function KupciView({kupci, canEdit, onNew, onEdit, onDelete, onView}) {
+  const ctrl = useTableControls("kupci", KUPCI_COLS_DEFAULT);
+  const visibleCols = ctrl.cols.filter(c=>c.visible);
+  const processed   = ctrl.filterAndSort(kupci);
+  return (
+    <>
+      <PageHeader title="Kupci" subtitle="Baza klijenata" action={canEdit&&<button onClick={onNew} style={btnS("primary")}>+ Novi kupac</button>}/>
+      <ctrl.Toolbar/>
+      <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
+        <table style={{width:"100%",borderCollapse:"collapse",background:T.surface}}>
+          <thead><tr>
+            {visibleCols.map(col=>(
+              <th key={col.key} {...ctrl.thDraggable(col)}>
+                <span style={{display:"flex",alignItems:"center"}}>{col.label}<ctrl.SortIcon colKey={col.key}/></span>
+              </th>
+            ))}
+            <th style={thS}></th>
+          </tr></thead>
+          <tbody>
+            {processed.length===0
+              ? <tr><td colSpan={visibleCols.length+1} style={{...tdS,textAlign:"center",color:T.textSoft,padding:40}}>Nema kupaca</td></tr>
+              : processed.map((k,i)=>(
+              <tr key={k.id} style={{background:i%2===0?T.surface:T.surfaceHover,cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight}
+                onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover}
+                onDoubleClick={()=>onView(k)}>
+                {visibleCols.map(col=>(
+                  <td key={col.key} style={{...tdS,...(col.key==="SifraKupca"?{color:T.primary,fontWeight:700,fontSize:12}:col.key==="Naziv"?{fontWeight:500}:{color:T.textMid})}}>
+                    {String(k[col.key]||"—")}
+                  </td>
+                ))}
+                <td style={tdS} onClick={e=>e.stopPropagation()}>
+                  <div style={{display:"flex",gap:5}}>
+                    {canEdit
+                      ? <><button onClick={()=>onEdit(k)} style={btnS("edit")}>Uredi</button><button onClick={()=>onDelete(k.id)} style={btnS("danger")}>Briši</button></>
+                      : <button onClick={()=>onView(k)} style={btnS("ghost")}>Pregled</button>
+                    }
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 // ── LOGIN ──────────────────────────────────────────────────────────────────────
 function LoginScreen({onLogin}) {
   const [email,setEmail]=useState("");
@@ -1012,51 +1068,7 @@ export default function App() {
         </>}
 
         {/* KUPCI */}
-        {view==="kupci" && (()=>{
-          const kupciCtrl = useTableControls("kupci", [
-            {key:"SifraKupca",label:"Šifra",visible:true},{key:"Naziv",label:"Naziv",visible:true},
-            {key:"Grad",label:"Grad",visible:true},{key:"Ulica",label:"Ulica",visible:true},
-            {key:"Broj",label:"Br.",visible:true},{key:"PostanskiBroj",label:"Poštanski",visible:true},
-            {key:"Telefon",label:"Telefon",visible:true},{key:"PIB",label:"PIB",visible:true},
-          ]);
-          const visKupciCols = kupciCtrl.cols.filter(c=>c.visible);
-          const processedKupci = kupciCtrl.filterAndSort(kupci);
-          return <>
-            <PageHeader title="Kupci" subtitle="Baza klijenata" action={canEdit("kupci")&&<button onClick={openNewKupac} style={btnS("primary")}>+ Novi kupac</button>}/>
-            <kupciCtrl.Toolbar/>
-            <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
-              <table style={{width:"100%",borderCollapse:"collapse",background:T.surface}}>
-                <thead><tr>
-                  {visKupciCols.map(col=>(
-                    <th key={col.key} {...kupciCtrl.thDraggable(col)}>
-                      <span style={{display:"flex",alignItems:"center"}}>{col.label}<kupciCtrl.SortIcon colKey={col.key}/></span>
-                    </th>
-                  ))}
-                  <th style={thS}></th>
-                </tr></thead>
-                <tbody>
-                  {processedKupci.map((k,i)=>(
-                    <tr key={k.id} style={{background:i%2===0?T.surface:T.surfaceHover,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight} onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover} onDoubleClick={()=>setViewingKupac(k)}>
-                      {visKupciCols.map(col=>(
-                        <td key={col.key} style={{...tdS,...(col.key==="SifraKupca"?{color:T.primary,fontWeight:700,fontSize:12}:col.key==="Naziv"?{fontWeight:500}:{color:T.textMid})}}>
-                          {String(k[col.key]||"—")}
-                        </td>
-                      ))}
-                      <td style={tdS} onClick={e=>e.stopPropagation()}>
-                        <div style={{display:"flex",gap:5}}>
-                          {canEdit("kupci")
-                            ? <><button onClick={()=>openEditKupac(k)} style={btnS("edit")}>Uredi</button><button onClick={()=>setConfirmDelete({type:"kupac",id:k.id})} style={btnS("danger")}>Briši</button></>
-                            : <button onClick={()=>setViewingKupac(k)} style={btnS("ghost")}>Pregled</button>
-                          }
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>;
-        })()}
+        {view==="kupci" && <KupciView kupci={kupci} canEdit={canEdit("kupci")} onNew={openNewKupac} onEdit={openEditKupac} onDelete={id=>setConfirmDelete({type:"kupac",id})} onView={setViewingKupac}/>}
 
         {/* OBRAČUN */}
         {view==="obracun" && <>
