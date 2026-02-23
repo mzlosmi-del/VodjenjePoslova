@@ -282,6 +282,7 @@ function UserSearchField({label, value, onChange, users}) {
 }
 
 
+function KupacSearchField({label, sifra, naziv, kupci, onChange}) {
   const [open,setOpen]=useState(false);
   const [search,setSearch]=useState("");
   const base={width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",colorScheme:"dark"};
