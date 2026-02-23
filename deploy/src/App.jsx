@@ -83,9 +83,9 @@ const montazaIsporukaOptions = ["Samo isporuka","Montaža i isporuka","Lično pr
 const placanjeOptions        = ["Faktura","Otpremnica","Zaduženje"];
 
 // ── shared styles ─────────────────────────────────────────────────────────────
-const thS = { padding:"10px 14px", textAlign:"left", color:T.textMid, fontSize:11,
-  textTransform:"uppercase", letterSpacing:"0.07em", fontWeight:600,
-  borderBottom:`1px solid ${T.border}`, whiteSpace:"nowrap", background:T.surfaceRaised, fontFamily:T.fontBody };
+const thS = { padding:"10px 14px", textAlign:"left", color:T.text, fontSize:11,
+  textTransform:"uppercase", letterSpacing:"0.07em", fontWeight:700,
+  borderBottom:`1px solid ${T.border}`, whiteSpace:"nowrap", background:"#1C2330", fontFamily:T.fontBody };
 const tdS = { padding:"11px 14px", color:T.text, fontSize:13,
   borderBottom:`1px solid ${T.border}`, verticalAlign:"middle", fontFamily:T.fontBody };
 
