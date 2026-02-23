@@ -1,13 +1,84 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+// ── supabase ──────────────────────────────────────────────────────────────────
+const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY  = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const formatPosaoNumber = (n) => `P${String(n).padStart(8, "0")}`;
 const todayISO  = () => new Date().toISOString().slice(0, 10);
-// iso "YYYY-MM-DD" → "DD.MM.YYYY" for display
 const fmtDate   = s => { if (!s) return "—"; const [y,m,d] = s.split("-"); return `${d}.${m}.${y}`; };
-// "DD.MM.YYYY" input → iso for comparisons
-const parseDate = s => { if (!s||!s.includes(".")) return s; const [d,m,y] = s.split("."); return `${y}-${m}-${d}`; };
 const isOverdue = iso => iso && new Date(iso) < new Date();
+
+// DB row → app object (snake_case → camelCase/Serbian field names)
+const dbToApp = r => ({
+  id:               r.id,
+  posaoNum:         r.posao_num,
+  Posao:            r.posao,
+  KLIJENT:          r.klijent,
+  SifraKupca:       r.sifra_kupca,
+  DatumUnosa:       r.datum_unosa,
+  RokZaIsporuku:    r.rok_za_isporuku,
+  Unosilac:         r.unosilac,
+  Opis:             r.opis,
+  PoslatiNaIzradu:  r.poslati_na_izradu,
+  MontazaIsporuka:  r.montaza_isporuka,
+  Placanje:         r.placanje,
+  StatusIzrade:     r.status_izrade,
+  StatusIsporuke:   r.status_isporuke,
+  StatusMontaze:    r.status_montaze,
+  SpecifikacijaCene:r.specifikacija_cene,
+  Obracun:          r.obracun != null ? String(r.obracun) : "",
+  ZavrsenPosao:     r.zavrsen_posao,
+  Fakturisano:      r.fakturisano,
+});
+
+// app object → DB row
+const appToDB = p => ({
+  posao_num:          p.posaoNum,
+  posao:              p.Posao,
+  klijent:            p.KLIJENT,
+  sifra_kupca:        p.SifraKupca,
+  datum_unosa:        p.DatumUnosa || null,
+  rok_za_isporuku:    p.RokZaIsporuku || null,
+  unosilac:           p.Unosilac,
+  opis:               p.Opis,
+  poslati_na_izradu:  p.PoslatiNaIzradu,
+  montaza_isporuka:   p.MontazaIsporuka,
+  placanje:           p.Placanje,
+  status_izrade:      p.StatusIzrade   || false,
+  status_isporuke:    p.StatusIsporuke || false,
+  status_montaze:     p.StatusMontaze  || false,
+  specifikacija_cene: p.SpecifikacijaCene,
+  obracun:            p.Obracun ? parseFloat(p.Obracun) : null,
+  zavrsen_posao:      p.ZavrsenPosao   || false,
+  fakturisano:        p.Fakturisano    || false,
+});
+
+const dbKupacToApp = r => ({
+  id:            r.id,
+  SifraKupca:    r.sifra_kupca,
+  Naziv:         r.naziv,
+  Grad:          r.grad,
+  Ulica:         r.ulica,
+  Broj:          r.broj,
+  PostanskiBroj: r.postanski_broj,
+  Telefon:       r.telefon,
+  PIB:           r.pib,
+});
+
+const appKupacToDB = k => ({
+  sifra_kupca:    k.SifraKupca,
+  naziv:          k.Naziv,
+  grad:           k.Grad,
+  ulica:          k.Ulica,
+  broj:           k.Broj,
+  postanski_broj: k.PostanskiBroj,
+  telefon:        k.Telefon,
+  pib:            k.PIB,
+});
 
 // ── design tokens ─────────────────────────────────────────────────────────────
 const T = {
@@ -43,39 +114,8 @@ const ALL_TABS = [
   { key:"korisnici", label:"Korisnici",        icon:"👥" },
 ];
 
-const statusOptions          = ["Čeka","U toku","Završeno","Otkazano","Delimično"];
 const montazaIsporukaOptions = ["Samo isporuka","Montaža i isporuka","Lično preuzimanje"];
 const placanjeOptions        = ["Faktura","Otpremnica","Zaduženje"];
-
-const initialIzradaOptions = [
-  {id:1,naziv:"Radionica"},{id:2,naziv:"Djurdjevdan"},{id:3,naziv:"GrafoSim"},
-  {id:4,naziv:"Delta Press"},{id:5,naziv:"Zemun Plast"},{id:6,naziv:"Cards Print"},
-];
-
-// ── seed data ──────────────────────────────────────────────────────────────────
-const initialKupci = [
-  {id:1,SifraKupca:"K001",Naziv:"Primer DOO",    Grad:"Beograd", Ulica:"Knez Mihailova",    Broj:"12",PostanskiBroj:"11000",Telefon:"011-123-4567",PIB:"123456789"},
-  {id:2,SifraKupca:"K002",Naziv:"Tech Solutions",Grad:"Novi Sad",Ulica:"Bulevar Oslobođenja",Broj:"45",PostanskiBroj:"21000",Telefon:"021-987-6543",PIB:"987654321"},
-  {id:3,SifraKupca:"K003",Naziv:"Gradnja Plus",  Grad:"Niš",     Ulica:"Obrenovićeva",      Broj:"7", PostanskiBroj:"18000",Telefon:"018-555-1234",PIB:"456789123"},
-];
-
-const initialPoslovi = [
-  {id:1,posaoNum:1,Posao:formatPosaoNumber(1),KLIJENT:"Primer DOO",    SifraKupca:"K001",DatumUnosa:"2024-01-15",RokZaIsporuku:"2024-02-15",Unosilac:"Marko M.",Opis:"Izrada metalne konstrukcije",      PoslatiNaIzradu:"Radionica",  MontazaIsporuka:"Montaža i isporuka",StatusIzrade:false,StatusIsporuke:false,StatusMontaze:false,SpecifikacijaCene:"Materijal+rad, bez PDV",Obracun:"12000",Placanje:"Faktura",  ZavrsenPosao:false,Fakturisano:false},
-  {id:2,posaoNum:2,Posao:formatPosaoNumber(2),KLIJENT:"Tech Solutions",SifraKupca:"K002",DatumUnosa:"2024-01-20",RokZaIsporuku:"2024-03-01",Unosilac:"Ana P.",  Opis:"Instalacija sistema klimatizacije",PoslatiNaIzradu:"GrafoSim",   MontazaIsporuka:"Samo isporuka",    StatusIzrade:true, StatusIsporuke:true, StatusMontaze:true, SpecifikacijaCene:"Fiksna cena 42000 din",Obracun:"42000",Placanje:"Faktura",  ZavrsenPosao:true, Fakturisano:false},
-  {id:3,posaoNum:3,Posao:formatPosaoNumber(3),KLIJENT:"Gradnja Plus",  SifraKupca:"K003",DatumUnosa:"2024-02-01",RokZaIsporuku:"2024-02-28",Unosilac:"Jovan K.",Opis:"Ugradnja prozora i vrata",          PoslatiNaIzradu:"Radionica",  MontazaIsporuka:"Montaža i isporuka",StatusIzrade:false,StatusIsporuke:false,StatusMontaze:false,SpecifikacijaCene:"Po komadu, 25000 din",  Obracun:"25000",Placanje:"Otpremnica",ZavrsenPosao:false,Fakturisano:false},
-  {id:4,posaoNum:4,Posao:formatPosaoNumber(4),KLIJENT:"Primer DOO",    SifraKupca:"K001",DatumUnosa:"2024-02-10",RokZaIsporuku:"2024-04-10",Unosilac:"Marko M.",Opis:"Servis mašina",                     PoslatiNaIzradu:"Delta Press", MontazaIsporuka:"Lično preuzimanje", StatusIzrade:false,StatusIsporuke:false,StatusMontaze:false,SpecifikacijaCene:"Paušal 7500 din",       Obracun:"7500", Placanje:"Zaduženje", ZavrsenPosao:false,Fakturisano:false},
-];
-
-const initialUsers = [
-  {id:1,ime:"Admin",prezime:"User",telefon:"060-000-0000",adresa:"Adminova 1, Beograd",username:"admin",password:"Admin123",tabPermissions:Object.fromEntries(ALL_TABS.map(t=>[t.key,"edit"])),isAdmin:true},
-  {id:2,ime:"Marko",prezime:"Marković",telefon:"061-111-2222",adresa:"Knez Mihailova 5, Beograd",username:"marko",password:"Marko123",tabPermissions:{poslovi:"view",aktivni:"edit",zavrseni:"view",radionica:"edit",montaza:"edit",isporuka:"edit",knjizenje:"edit",kupci:"view",obracun:"none",korisnici:"none"},isAdmin:false},
-];
-
-function validatePassword(pw) {
-  if (!pw||pw.length<8) return "Lozinka mora imati najmanje 8 karaktera.";
-  if (!/[A-Z]/.test(pw)) return "Lozinka mora sadržati bar jedno veliko slovo.";
-  return null;
-}
 
 // ── shared styles ─────────────────────────────────────────────────────────────
 const thS = {padding:"10px 14px",textAlign:"left",color:T.textSoft,fontSize:11,textTransform:"uppercase",letterSpacing:"0.07em",fontWeight:600,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap",background:T.bg,fontFamily:T.fontBody};
@@ -90,12 +130,10 @@ const btnS = (variant="primary") => {
 };
 
 // ── status helpers ─────────────────────────────────────────────────────────────
-// boolean checkbox display
 const CheckBadge = ({val}) => val
   ? <span style={{background:T.greenBg,color:T.green,border:`1px solid ${T.greenBorder}`,borderRadius:5,padding:"2px 9px",fontSize:11,fontWeight:600,fontFamily:T.fontBody}}>✓ Da</span>
   : <span style={{background:T.surfaceRaised,color:T.textSoft,border:`1px solid ${T.border}`,borderRadius:5,padding:"2px 9px",fontSize:11,fontWeight:600,fontFamily:T.fontBody}}>— Ne</span>;
 
-// inline toggle checkbox for table cells
 const InlineCheck = ({val, onChange, disabled}) => (
   <label style={{display:"flex",alignItems:"center",gap:6,cursor:disabled?"default":"pointer"}}>
     <div onClick={()=>!disabled&&onChange(!val)} style={{
@@ -105,9 +143,7 @@ const InlineCheck = ({val, onChange, disabled}) => (
     }}>
       {val && <span style={{color:T.green,fontSize:13,lineHeight:1,fontWeight:700}}>✓</span>}
     </div>
-    <span style={{color:val?T.green:T.textSoft,fontSize:12,fontFamily:T.fontBody,fontWeight:val?600:400}}>
-      {val?"Da":"Ne"}
-    </span>
+    <span style={{color:val?T.green:T.textSoft,fontSize:12,fontFamily:T.fontBody,fontWeight:val?600:400}}>{val?"Da":"Ne"}</span>
   </label>
 );
 
@@ -118,6 +154,28 @@ const PlacanjeBadge = ({val}) => {
     ? <span style={{background:`${c}18`,color:c,border:`1px solid ${c}35`,borderRadius:5,padding:"2px 9px",fontSize:11,fontWeight:600,fontFamily:T.fontBody}}>{val}</span>
     : <span style={{color:T.textSoft}}>—</span>;
 };
+
+// ── loading spinner ────────────────────────────────────────────────────────────
+function Spinner({text="Učitavanje..."}) {
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,padding:60,color:T.textSoft,fontFamily:T.fontBody}}>
+      <div style={{width:32,height:32,border:`3px solid ${T.border}`,borderTopColor:T.primary,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <span style={{fontSize:13}}>{text}</span>
+    </div>
+  );
+}
+
+// ── error banner ───────────────────────────────────────────────────────────────
+function ErrBanner({msg,onDismiss}) {
+  if (!msg) return null;
+  return (
+    <div style={{background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:T.radiusSm,padding:"10px 14px",color:T.red,fontSize:13,marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center",fontFamily:T.fontBody}}>
+      <span>⚠ {msg}</span>
+      {onDismiss && <button onClick={onDismiss} style={{background:"none",border:"none",color:T.red,cursor:"pointer",fontSize:16,lineHeight:1}}>×</button>}
+    </div>
+  );
+}
 
 // ── components ─────────────────────────────────────────────────────────────────
 function Modal({title,onClose,children,wide}) {
@@ -135,31 +193,25 @@ function Modal({title,onClose,children,wide}) {
 }
 
 function Field({label,value,onChange,type="text",options,readOnly,error}) {
-  const base={width:"100%",background:readOnly?T.bg:T.surfaceRaised,border:`1px solid ${error?T.red:T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:readOnly?T.textMid:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",cursor:readOnly?"default":"text",outline:"none"};
+  const base={width:"100%",background:readOnly?T.bg:T.surfaceRaised,border:`1px solid ${error?T.red:T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:readOnly?T.textMid:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",cursor:readOnly?"default":"text",outline:"none",colorScheme:"dark"};
   return (
     <div style={{marginBottom:14}}>
       <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:4,fontFamily:T.fontBody}}>{label}</label>
       {options
         ? <select value={value||""} onChange={e=>onChange(e.target.value)} style={{...base,cursor:"pointer"}}><option value="">—</option>{options.map(o=><option key={o} value={o}>{o}</option>)}</select>
-        : <input type={type} value={value||""} onChange={e=>!readOnly&&onChange(e.target.value)} readOnly={readOnly} style={base} />
+        : <input type={type} value={value||""} onChange={e=>!readOnly&&onChange(e.target.value)} readOnly={readOnly} style={base}/>
       }
       {error && <div style={{color:T.red,fontSize:11,marginTop:3,fontFamily:T.fontBody}}>{error}</div>}
     </div>
   );
 }
 
-// Date input that shows/stores as YYYY-MM-DD but displays as DD.MM.YYYY
 function DateField({label,value,onChange,readOnly,error}) {
   return (
     <div style={{marginBottom:14}}>
       <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:4,fontFamily:T.fontBody}}>{label}</label>
-      <input
-        type="date"
-        value={value||""}
-        onChange={e=>!readOnly&&onChange(e.target.value)}
-        readOnly={readOnly}
-        style={{width:"100%",background:readOnly?T.bg:T.surfaceRaised,border:`1px solid ${error?T.red:T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:readOnly?T.textMid:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"dark"}}
-      />
+      <input type="date" value={value||""} onChange={e=>!readOnly&&onChange(e.target.value)} readOnly={readOnly}
+        style={{width:"100%",background:readOnly?T.bg:T.surfaceRaised,border:`1px solid ${error?T.red:T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:readOnly?T.textMid:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"dark"}}/>
       {error && <div style={{color:T.red,fontSize:11,marginTop:3}}>{error}</div>}
     </div>
   );
@@ -202,7 +254,7 @@ function RadioGroup({label,value,onChange,options,readOnly}) {
               cursor:readOnly?"default":"pointer",fontSize:13,fontWeight:active?600:400,
               display:"flex",alignItems:"center",gap:7,transition:"all 0.15s",fontFamily:T.fontBody,
             }}>
-              <span style={{width:11,height:11,borderRadius:"50%",border:`2px solid ${active?m.c:T.borderStrong}`,background:active?m.c:"transparent",flexShrink:0,transition:"all 0.15s"}} />
+              <span style={{width:11,height:11,borderRadius:"50%",border:`2px solid ${active?m.c:T.borderStrong}`,background:active?m.c:"transparent",flexShrink:0,transition:"all 0.15s"}}/>
               {opt}
             </button>
           );
@@ -215,7 +267,7 @@ function RadioGroup({label,value,onChange,options,readOnly}) {
 function KupacSearchField({label,sifra,naziv,kupci,onChange}) {
   const [open,setOpen]=useState(false);
   const [search,setSearch]=useState("");
-  const base={width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box"};
+  const base={width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",colorScheme:"dark"};
   const filtered=kupci.filter(k=>k.SifraKupca.toLowerCase().includes(search.toLowerCase())||k.Naziv.toLowerCase().includes(search.toLowerCase())||k.Grad.toLowerCase().includes(search.toLowerCase()));
   const display=sifra?`${sifra} — ${naziv}`:"";
   return (
@@ -228,7 +280,7 @@ function KupacSearchField({label,sifra,naziv,kupci,onChange}) {
       {open && (
         <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,zIndex:3000,boxShadow:T.shadowMd,overflow:"hidden"}}>
           <div style={{padding:"8px 8px 5px"}}>
-            <input autoFocus placeholder="Pretraži..." value={search} onChange={e=>setSearch(e.target.value)} onClick={e=>e.stopPropagation()} style={{...base,fontSize:12}} />
+            <input autoFocus placeholder="Pretraži..." value={search} onChange={e=>setSearch(e.target.value)} onClick={e=>e.stopPropagation()} style={{...base,fontSize:12}}/>
           </div>
           <div style={{maxHeight:200,overflowY:"auto"}}>
             {filtered.length===0
@@ -269,33 +321,23 @@ function StatCard({label,value,color,sub}) {
   );
 }
 
-// ── inline cell update helper ──────────────────────────────────────────────────
-// used by Radionica, Montaza, Isporuka, Knjizenje to update a single field inline
-function useInlineUpdate(setPoslovi) {
-  return (id, field, value) => setPoslovi(ps => ps.map(p => p.id===id ? {...p,[field]:value} : p));
-}
-
-// ── FULL POSLOVI TABLE (used by Poslovi, Aktivni, Završeni) ───────────────────
+// ── FULL POSLOVI TABLE ─────────────────────────────────────────────────────────
 function PosaoTable({rows,canEdit,onView,onEdit,onDelete}) {
   const miColor = v => v==="Montaža i isporuka"?T.primary:v==="Samo isporuka"?T.green:T.purple;
   return (
     <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
       <table style={{width:"100%",borderCollapse:"collapse",background:T.surface}}>
         <thead>
-          <tr>
-            {["Posao","Klijent","Šifra","Datum","Rok isporuke","Unosilac","Opis","Poslati","Montaža/Isporuka","Plaćanje","St. izrade","St. isporuke","St. montaže","Specifikacija","Obračun","Završen","Fakturisano",""].map(h=><th key={h} style={thS}>{h}</th>)}
-          </tr>
+          <tr>{["Posao","Klijent","Šifra","Datum","Rok isporuke","Unosilac","Opis","Poslati","Montaža/Isporuka","Plaćanje","St. izrade","St. isporuke","St. montaže","Specifikacija","Obračun","Završen","Fakturisano",""].map(h=><th key={h} style={thS}>{h}</th>)}</tr>
         </thead>
         <tbody>
           {rows.length===0
             ? <tr><td colSpan={18} style={{...tdS,textAlign:"center",color:T.textSoft,padding:40}}>Nema zapisa</td></tr>
             : rows.map((p,i)=>(
-              <tr key={p.id}
-                style={{cursor:"pointer",background:i%2===0?T.surface:T.surfaceHover}}
+              <tr key={p.id} style={{cursor:"pointer",background:i%2===0?T.surface:T.surfaceHover}}
                 onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight}
                 onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover}
-                onDoubleClick={()=>onView(p)}
-              >
+                onDoubleClick={()=>onView(p)}>
                 <td style={{...tdS,color:T.primary,fontWeight:700}}>{p.Posao}</td>
                 <td style={{...tdS,fontWeight:500}}>{p.KLIJENT}</td>
                 <td style={{...tdS,color:T.textSoft,fontSize:12}}>{p.SifraKupca}</td>
@@ -331,12 +373,20 @@ function PosaoTable({rows,canEdit,onView,onEdit,onDelete}) {
 }
 
 // ── LOGIN ──────────────────────────────────────────────────────────────────────
-function LoginScreen({users,onLogin}) {
-  const [username,setUsername]=useState("");
+function LoginScreen({onLogin}) {
+  const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");
   const [error,setError]=useState("");
   const [showPw,setShowPw]=useState(false);
-  function handleLogin(){const u=users.find(u=>u.username===username&&u.password===password);if(!u){setError("Pogrešno korisničko ime ili lozinka.");return;}onLogin(u);}
+  const [loading,setLoading]=useState(false);
+
+  async function handleLogin() {
+    setLoading(true); setError("");
+    const {data,error:e} = await sb.auth.signInWithPassword({email,password});
+    if (e) { setError(e.message); setLoading(false); return; }
+    onLogin(data.user);
+  }
+
   const inp={width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"11px 14px",color:T.text,fontSize:14,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"dark"};
   return (
     <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0D1117 0%,#111827 50%,#0F172A 100%)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:T.fontBody}}>
@@ -353,8 +403,8 @@ function LoginScreen({users,onLogin}) {
           <p style={{color:T.textSoft,fontSize:13,margin:0}}>Prijavite se na svoj nalog</p>
         </div>
         <div style={{marginBottom:14}}>
-          <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:4}}>Korisničko ime</label>
-          <input value={username} onChange={e=>{setUsername(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&handleLogin()} style={inp}/>
+          <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:4}}>Email adresa</label>
+          <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&handleLogin()} style={inp} placeholder="vas@email.com"/>
         </div>
         <div style={{marginBottom:22}}>
           <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:4}}>Lozinka</label>
@@ -363,12 +413,10 @@ function LoginScreen({users,onLogin}) {
             <button onClick={()=>setShowPw(v=>!v)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:T.textSoft,cursor:"pointer",fontSize:15}}>{showPw?"🙈":"👁"}</button>
           </div>
         </div>
-        {error && <div style={{background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:T.radiusSm,padding:"9px 13px",color:T.red,fontSize:13,marginBottom:14}}>{error}</div>}
-        <button onClick={handleLogin} style={{...btnS("primary"),width:"100%",padding:"12px",fontSize:14}}>Prijavi se →</button>
-        <div style={{marginTop:20,padding:"12px 14px",background:T.surfaceRaised,borderRadius:T.radiusSm,border:`1px solid ${T.border}`}}>
-          <div style={{fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",color:T.textSoft,marginBottom:5}}>Demo nalozi</div>
-          <div style={{color:T.textMid,fontSize:12}}>admin / Admin123 · marko / Marko123</div>
-        </div>
+        <ErrBanner msg={error}/>
+        <button onClick={handleLogin} disabled={loading} style={{...btnS("primary"),width:"100%",padding:"12px",fontSize:14,opacity:loading?0.6:1}}>
+          {loading?"Prijavljivanje...":"Prijavi se →"}
+        </button>
       </div>
     </div>
   );
@@ -376,84 +424,209 @@ function LoginScreen({users,onLogin}) {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function App() {
-  const [currentUser,setCurrentUser]=useState(null);
-  const [users,setUsers]=useState(initialUsers);
-  const [view,setView]=useState("aktivni");
-  const [poslovi,setPoslovi]=useState(initialPoslovi);
-  const [kupci,setKupci]=useState(initialKupci);
-  const [nextPosaoNum,setNextPosaoNum]=useState(initialPoslovi.length+1);
-  const [izradaOptions]=useState(initialIzradaOptions);
+  const [authUser,setAuthUser]     = useState(null);   // Supabase auth user
+  const [profile,setProfile]       = useState(null);   // profiles row
+  const [authLoading,setAuthLoading] = useState(true);
 
-  const [editingPosao,setEditingPosao]=useState(null);
-  const [viewingPosao,setViewingPosao]=useState(null);
-  const [editingKupac,setEditingKupac]=useState(null);
-  const [viewingKupac,setViewingKupac]=useState(null);
-  const [editingUser,setEditingUser]=useState(null);
-  const [newPosao,setNewPosao]=useState(false);
-  const [newKupac,setNewKupac]=useState(false);
-  const [newUser,setNewUser]=useState(false);
-  const [tempData,setTempData]=useState({});
-  const [tempErrors,setTempErrors]=useState({});
-  const [confirmDelete,setConfirmDelete]=useState(null);
+  const [view,setView]             = useState("aktivni");
+  const [poslovi,setPoslovi]       = useState([]);
+  const [kupci,setKupci]           = useState([]);
+  const [izradaOptions,setIzradaOptions] = useState([]);
+  const [users,setUsers]           = useState([]);      // all profiles (admin only)
+  const [loading,setLoading]       = useState(false);
+  const [globalErr,setGlobalErr]   = useState("");
 
-  const inlineUpdate = useInlineUpdate(setPoslovi);
+  const [editingPosao,setEditingPosao] = useState(null);
+  const [viewingPosao,setViewingPosao] = useState(null);
+  const [editingKupac,setEditingKupac] = useState(null);
+  const [viewingKupac,setViewingKupac] = useState(null);
+  const [editingUser,setEditingUser]   = useState(null);
+  const [newPosao,setNewPosao]   = useState(false);
+  const [newKupac,setNewKupac]   = useState(false);
+  const [newUser,setNewUser]     = useState(false);
+  const [tempData,setTempData]   = useState({});
+  const [tempErrors,setTempErrors] = useState({});
+  const [confirmDelete,setConfirmDelete] = useState(null);
+  const [saving,setSaving]       = useState(false);
 
+  // ── auth listener ────────────────────────────────────────────────────────────
+  useEffect(()=>{
+    sb.auth.getSession().then(({data:{session}})=>{
+      if (session?.user) { setAuthUser(session.user); loadProfile(session.user.id); }
+      else setAuthLoading(false);
+    });
+    const {data:{subscription}} = sb.auth.onAuthStateChange((_e,session)=>{
+      if (session?.user) { setAuthUser(session.user); loadProfile(session.user.id); }
+      else { setAuthUser(null); setProfile(null); setAuthLoading(false); }
+    });
+    return ()=>subscription.unsubscribe();
+  },[]);
+
+  async function loadProfile(uid) {
+    const {data} = await sb.from("profiles").select("*").eq("id",uid).single();
+    setProfile(data);
+    setAuthLoading(false);
+  }
+
+  // ── data loaders ─────────────────────────────────────────────────────────────
+  const loadPoslovi = useCallback(async()=>{
+    const {data,error} = await sb.from("poslovi").select("*").order("posao_num");
+    if (error) { setGlobalErr("Greška pri učitavanju poslova: "+error.message); return; }
+    setPoslovi((data||[]).map(dbToApp));
+  },[]);
+
+  const loadKupci = useCallback(async()=>{
+    const {data,error} = await sb.from("kupci").select("*").order("naziv");
+    if (error) { setGlobalErr("Greška pri učitavanju kupaca: "+error.message); return; }
+    setKupci((data||[]).map(dbKupacToApp));
+  },[]);
+
+  const loadIzradaOptions = useCallback(async()=>{
+    const {data} = await sb.from("izrada_opcije").select("*").order("id");
+    setIzradaOptions(data||[]);
+  },[]);
+
+  const loadUsers = useCallback(async()=>{
+    const {data,error} = await sb.from("profiles").select("*");
+    if (!error) setUsers(data||[]);
+  },[]);
+
+  useEffect(()=>{
+    if (!profile) return;
+    setLoading(true);
+    Promise.all([loadPoslovi(), loadKupci(), loadIzradaOptions()])
+      .finally(()=>setLoading(false));
+    if (profile.is_admin) loadUsers();
+  },[profile]);
+
+  // ── derived rows ──────────────────────────────────────────────────────────────
   const aktivniRows   = useMemo(()=>poslovi.filter(p=>!p.ZavrsenPosao),[poslovi]);
   const zavrseniRows  = useMemo(()=>poslovi.filter(p=>p.ZavrsenPosao),[poslovi]);
-  const radionicaRows = useMemo(()=>poslovi,[poslovi]); // all jobs shown in radionica
   const montazaRows   = useMemo(()=>poslovi.filter(p=>p.MontazaIsporuka==="Montaža i isporuka"),[poslovi]);
   const isporukaRows  = useMemo(()=>poslovi.filter(p=>p.MontazaIsporuka==="Samo isporuka"||p.MontazaIsporuka==="Montaža i isporuka"),[poslovi]);
   const knjigenjeRows = useMemo(()=>poslovi.filter(p=>p.ZavrsenPosao&&p.Placanje==="Faktura"),[poslovi]);
   const obracunSums   = useMemo(()=>{const s={};poslovi.forEach(p=>{const k=p.Placanje||"—";s[k]=(s[k]||0)+(parseFloat(p.Obracun)||0);});return s;},[poslovi]);
 
-  const perm    = tab => currentUser?.tabPermissions[tab]||"none";
+  // ── permissions ───────────────────────────────────────────────────────────────
+  const perm    = tab => profile?.tab_permissions?.[tab]||"none";
   const canSee  = tab => perm(tab)!=="none";
   const canEdit = tab => perm(tab)==="edit";
   const tf = k => v => setTempData(d=>({...d,[k]:v}));
 
+  // ── inline field update (Radionica / Montaža / Isporuka / Knjiženje) ─────────
+  async function inlineUpdate(id, appField, value) {
+    const fieldMap = {
+      StatusIzrade:"status_izrade", StatusIsporuke:"status_isporuke",
+      StatusMontaze:"status_montaze", Fakturisano:"fakturisano",
+    };
+    const dbField = fieldMap[appField];
+    if (!dbField) return;
+    // optimistic update
+    setPoslovi(ps=>ps.map(p=>p.id===id?{...p,[appField]:value}:p));
+    const {error} = await sb.from("poslovi").update({[dbField]:value}).eq("id",id);
+    if (error) { setGlobalErr("Greška pri ažuriranju: "+error.message); loadPoslovi(); }
+  }
+
+  // ── next posao num ────────────────────────────────────────────────────────────
+  async function getNextPosaoNum() {
+    const {data} = await sb.from("poslovi").select("posao_num").order("posao_num",{ascending:false}).limit(1);
+    return data&&data.length>0 ? data[0].posao_num+1 : 1;
+  }
+
+  // ── posao CRUD ────────────────────────────────────────────────────────────────
   function openEditPosao(p){setEditingPosao(p.id);setTempData({...p});setTempErrors({});}
-  function openNewPosao() {
+  async function openNewPosao(){
+    const n = await getNextPosaoNum();
     setNewPosao(true);
-    setTempData({id:Date.now(),posaoNum:nextPosaoNum,Posao:formatPosaoNumber(nextPosaoNum),KLIJENT:"",SifraKupca:"",DatumUnosa:todayISO(),RokZaIsporuku:"",Unosilac:"",Opis:"",PoslatiNaIzradu:"",MontazaIsporuka:"",Placanje:"Faktura",StatusIzrade:false,StatusIsporuke:false,StatusMontaze:false,SpecifikacijaCene:"",Obracun:"",ZavrsenPosao:false,Fakturisano:false});
+    setTempData({posaoNum:n,Posao:formatPosaoNumber(n),KLIJENT:"",SifraKupca:"",DatumUnosa:todayISO(),RokZaIsporuku:"",Unosilac:"",Opis:"",PoslatiNaIzradu:"",MontazaIsporuka:"",Placanje:"Faktura",StatusIzrade:false,StatusIsporuke:false,StatusMontaze:false,SpecifikacijaCene:"",Obracun:"",ZavrsenPosao:false,Fakturisano:false});
     setTempErrors({});
   }
-  function savePosao(){
-    if(newPosao){setPoslovi(p=>[...p,tempData]);setNextPosaoNum(n=>n+1);setNewPosao(false);}
-    else{setPoslovi(p=>p.map(x=>x.id===editingPosao?tempData:x));setEditingPosao(null);}
-    setTempData({});
+  async function savePosao(){
+    setSaving(true);
+    const row = appToDB(tempData);
+    let error;
+    if (newPosao) {
+      ({error} = await sb.from("poslovi").insert([row]));
+    } else {
+      ({error} = await sb.from("poslovi").update(row).eq("id",editingPosao));
+    }
+    setSaving(false);
+    if (error) { setGlobalErr("Greška pri snimanju: "+error.message); return; }
+    await loadPoslovi();
+    closeModal();
   }
 
-  function openEditKupac(k){setEditingKupac(k.id);setTempData({...k});setTempErrors({});}
-  function openNewKupac() {setNewKupac(true);setTempData({id:Date.now(),SifraKupca:"",Naziv:"",Grad:"",Ulica:"",Broj:"",PostanskiBroj:"",Telefon:"",PIB:""});setTempErrors({});}
-  function saveKupac(){if(newKupac){setKupci(k=>[...k,tempData]);setNewKupac(false);}else{setKupci(k=>k.map(x=>x.id===editingKupac?tempData:x));setEditingKupac(null);}setTempData({});}
+  async function deletePosao(id){
+    const {error} = await sb.from("poslovi").delete().eq("id",id);
+    if (error) { setGlobalErr("Greška pri brisanju: "+error.message); return; }
+    setPoslovi(ps=>ps.filter(p=>p.id!==id));
+    setConfirmDelete(null);
+  }
 
-  function openEditUser(u){setEditingUser(u.id);setTempData({...u,passwordConfirm:"",password:""});setTempErrors({});}
-  function openNewUser() {setNewUser(true);setTempData({id:Date.now(),ime:"",prezime:"",telefon:"",adresa:"",username:"",password:"",passwordConfirm:"",isAdmin:false,tabPermissions:Object.fromEntries(ALL_TABS.map(t=>[t.key,"none"]))});setTempErrors({});}
-  function saveUser(){
+  // ── kupac CRUD ────────────────────────────────────────────────────────────────
+  function openEditKupac(k){setEditingKupac(k.id);setTempData({...k});setTempErrors({});}
+  function openNewKupac(){setNewKupac(true);setTempData({SifraKupca:"",Naziv:"",Grad:"",Ulica:"",Broj:"",PostanskiBroj:"",Telefon:"",PIB:""});setTempErrors({});}
+  async function saveKupac(){
+    setSaving(true);
+    const row = appKupacToDB(tempData);
+    let error;
+    if (newKupac) {
+      ({error} = await sb.from("kupci").insert([row]));
+    } else {
+      ({error} = await sb.from("kupci").update(row).eq("id",editingKupac));
+    }
+    setSaving(false);
+    if (error) { setGlobalErr("Greška pri snimanju: "+error.message); return; }
+    await loadKupci();
+    closeModal();
+  }
+
+  async function deleteKupac(id){
+    const {error} = await sb.from("kupci").delete().eq("id",id);
+    if (error) { setGlobalErr("Greška pri brisanju: "+error.message); return; }
+    setKupci(ks=>ks.filter(k=>k.id!==id));
+    setConfirmDelete(null);
+  }
+
+  // ── user CRUD (profiles table) ────────────────────────────────────────────────
+  function openEditUser(u){setEditingUser(u.id);setTempData({...u});setTempErrors({});}
+  function openNewUser(){setNewUser(true);setTempData({ime:"",prezime:"",telefon:"",adresa:"",is_admin:false,tab_permissions:Object.fromEntries(ALL_TABS.map(t=>[t.key,"none"]))});setTempErrors({});}
+  async function saveUser(){
     const e={};
     if(!tempData.ime?.trim())e.ime="Obavezno.";
     if(!tempData.prezime?.trim())e.prezime="Obavezno.";
-    if(!tempData.username?.trim())e.username="Obavezno.";
-    if(newUser||tempData.password){const pe=validatePassword(tempData.password);if(pe)e.password=pe;if(tempData.password!==tempData.passwordConfirm)e.passwordConfirm="Lozinke se ne podudaraju.";}
     if(Object.keys(e).length){setTempErrors(e);return;}
-    const{passwordConfirm,...ud}=tempData;
-    if(!ud.password&&!newUser){const ex=users.find(u=>u.id===editingUser);ud.password=ex.password;}
-    if(newUser){setUsers(u=>[...u,ud]);setNewUser(false);}else{setUsers(u=>u.map(x=>x.id===editingUser?ud:x));setEditingUser(null);}
-    setTempData({});setTempErrors({});
+    setSaving(true);
+    const row={ime:tempData.ime,prezime:tempData.prezime,telefon:tempData.telefon,adresa:tempData.adresa,is_admin:tempData.is_admin||false,tab_permissions:tempData.tab_permissions||{}};
+    const {error} = await sb.from("profiles").update(row).eq("id",editingUser);
+    setSaving(false);
+    if (error){setGlobalErr("Greška: "+error.message);return;}
+    await loadUsers();
+    closeModal();
   }
 
-  function deletePosao(id){setConfirmDelete({type:"posao",id});}
-  function deleteKupac(id){setConfirmDelete({type:"kupac",id});}
-  function deleteUser(id) {setConfirmDelete({type:"user", id});}
-  function confirmDeleteAction(){
-    if(confirmDelete.type==="posao")setPoslovi(p=>p.filter(x=>x.id!==confirmDelete.id));
-    else if(confirmDelete.type==="kupac")setKupci(k=>k.filter(x=>x.id!==confirmDelete.id));
-    else setUsers(u=>u.filter(x=>x.id!==confirmDelete.id));
+  async function confirmDeleteAction(){
+    if(confirmDelete.type==="posao") await deletePosao(confirmDelete.id);
+    else if(confirmDelete.type==="kupac") await deleteKupac(confirmDelete.id);
     setConfirmDelete(null);
   }
+
   function closeModal(){setEditingPosao(null);setViewingPosao(null);setEditingKupac(null);setViewingKupac(null);setEditingUser(null);setNewPosao(false);setNewKupac(false);setNewUser(false);setTempData({});setTempErrors({});}
 
-  if(!currentUser) return <LoginScreen users={users} onLogin={u=>{setCurrentUser(u);const f=ALL_TABS.find(t=>u.tabPermissions[t.key]!=="none");setView(f?.key||"aktivni");}}/>;
+  async function handleLogout(){
+    await sb.auth.signOut();
+    setAuthUser(null); setProfile(null);
+  }
+
+  // ── loading / auth gates ──────────────────────────────────────────────────────
+  if (authLoading) return (
+    <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <link href={FONT_LINK} rel="stylesheet"/>
+      <Spinner text="Provera sesije..."/>
+    </div>
+  );
+
+  if (!authUser || !profile) return <LoginScreen onLogin={u=>{setAuthUser(u);loadProfile(u.id);}}/>;
 
   const visibleTabs = ALL_TABS.filter(t=>canSee(t.key));
 
@@ -470,7 +643,7 @@ export default function App() {
     </div>
   );
 
-  // ── POSAO EDIT MODAL FORM ──────────────────────────────────────────────────
+  // ── POSAO FORM ─────────────────────────────────────────────────────────────
   const PosaoForm = () => (
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}>
       <Field label="Posao (automatski)" value={tempData.Posao} onChange={()=>{}} readOnly/>
@@ -486,17 +659,11 @@ export default function App() {
       <RadioGroup label="Plaćanje" value={tempData.Placanje} onChange={tf("Placanje")} options={placanjeOptions}/>
       <div style={{gridColumn:"1/-1",display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"0 20px",marginTop:4}}>
         <CheckField label="Završen posao" value={tempData.ZavrsenPosao} onChange={tf("ZavrsenPosao")}/>
-        {/* read-only — changed only from their dedicated views */}
-        {[
-          ["Status izrade",   tempData.StatusIzrade,   "Radionica"],
-          ["Status isporuke", tempData.StatusIsporuke, "Isporuka"],
-          ["Status montaže",  tempData.StatusMontaze,  "Montaža"],
-          ["Fakturisano",     tempData.Fakturisano,    "Knjiženje"],
-        ].map(([lbl,val,viewName])=>(
+        {[["Status izrade",tempData.StatusIzrade,"Radionica"],["Status isporuke",tempData.StatusIsporuke,"Isporuka"],["Status montaže",tempData.StatusMontaze,"Montaža"],["Fakturisano",tempData.Fakturisano,"Knjiženje"]].map(([lbl,val,vn])=>(
           <div key={lbl} style={{marginBottom:14}}>
             <label style={{display:"block",color:T.textSoft,fontSize:12,fontWeight:500,marginBottom:6,fontFamily:T.fontBody}}>{lbl}</label>
             <CheckBadge val={val}/>
-            <div style={{color:T.textSoft,fontSize:10,marginTop:5,fontFamily:T.fontBody}}>Menja se u: <span style={{color:T.primary,fontWeight:600}}>{viewName}</span></div>
+            <div style={{color:T.textSoft,fontSize:10,marginTop:5,fontFamily:T.fontBody}}>Menja se u: <span style={{color:T.primary,fontWeight:600}}>{vn}</span></div>
           </div>
         ))}
       </div>
@@ -520,10 +687,9 @@ export default function App() {
             {visibleTabs.map(t=>(
               <button key={t.key} onClick={()=>setView(t.key)} style={{
                 background:view===t.key?T.primaryLight:"none",border:"none",
-                color:view===t.key?T.primary:T.textSoft,
-                borderRadius:T.radiusSm,padding:"5px 12px",cursor:"pointer",fontSize:12,
-                fontWeight:view===t.key?600:400,transition:"all 0.15s",
-                display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap",fontFamily:T.fontBody,
+                color:view===t.key?T.primary:T.textSoft,borderRadius:T.radiusSm,
+                padding:"5px 12px",cursor:"pointer",fontSize:12,fontWeight:view===t.key?600:400,
+                transition:"all 0.15s",display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap",fontFamily:T.fontBody,
               }}>
                 <span style={{fontSize:13}}>{t.icon}</span>{t.label}
               </button>
@@ -531,139 +697,129 @@ export default function App() {
           </nav>
           <div style={{display:"flex",alignItems:"center",gap:9,flexShrink:0,marginLeft:12}}>
             <div style={{width:30,height:30,borderRadius:"50%",background:T.primaryLight,border:`2px solid ${T.primaryBorder}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:T.primary}}>
-              {currentUser.ime[0]}{currentUser.prezime[0]}
+              {(profile.ime||"?")[0]}{(profile.prezime||"")[0]}
             </div>
             <div style={{lineHeight:1.3}}>
-              <div style={{fontSize:12,fontWeight:600,color:T.text}}>{currentUser.ime} {currentUser.prezime}</div>
-              <div style={{fontSize:10,color:T.textSoft}}>{currentUser.isAdmin?"Administrator":"Korisnik"}</div>
+              <div style={{fontSize:12,fontWeight:600,color:T.text}}>{profile.ime} {profile.prezime}</div>
+              <div style={{fontSize:10,color:T.textSoft}}>{profile.is_admin?"Administrator":"Korisnik"}</div>
             </div>
-            <button onClick={()=>setCurrentUser(null)} style={{...btnS("ghost"),padding:"5px 11px",fontSize:11,marginLeft:4}}>Odjavi se</button>
+            <button onClick={handleLogout} style={{...btnS("ghost"),padding:"5px 11px",fontSize:11,marginLeft:4}}>Odjavi se</button>
           </div>
         </div>
       </div>
 
       <div style={{maxWidth:1700,margin:"0 auto",padding:"22px 20px"}}>
+        <ErrBanner msg={globalErr} onDismiss={()=>setGlobalErr("")}/>
 
-        {/* ── POSLOVI ── */}
+        {loading && <Spinner/>}
+
+        {!loading && <>
+
+        {/* POSLOVI */}
         {view==="poslovi" && <>
           <PageHeader title="Svi poslovi" subtitle="Pregled svih unetih poslova"/>
-          <PosaoTable rows={poslovi} canEdit={canEdit("poslovi")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={deletePosao}/>
+          <PosaoTable rows={poslovi} canEdit={canEdit("poslovi")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id})}/>
         </>}
 
-        {/* ── AKTIVNI ── */}
+        {/* AKTIVNI */}
         {view==="aktivni" && <>
-          <PageHeader
-            title="Aktivni poslovi"
-            subtitle="Završen posao = Ne"
-            action={canEdit("aktivni") && <button onClick={openNewPosao} style={btnS("primary")}>+ Novi posao</button>}
-          />
+          <PageHeader title="Aktivni poslovi" subtitle="Završen posao = Ne"
+            action={canEdit("aktivni")&&<button onClick={openNewPosao} style={btnS("primary")}>+ Novi posao</button>}/>
           <div style={{display:"flex",gap:12,marginBottom:20}}>
             <StatCard label="Aktivnih" value={aktivniRows.length} color={T.amber}/>
             <StatCard label="Ukupan obračun" value={aktivniRows.reduce((s,p)=>s+(parseFloat(p.Obracun)||0),0).toLocaleString()+" RSD"} color={T.green}/>
           </div>
-          <PosaoTable rows={aktivniRows} canEdit={canEdit("aktivni")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={deletePosao}/>
+          <PosaoTable rows={aktivniRows} canEdit={canEdit("aktivni")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id})}/>
         </>}
 
-        {/* ── ZAVRŠENI ── */}
+        {/* ZAVRŠENI */}
         {view==="zavrseni" && <>
           <PageHeader title="Završeni poslovi" subtitle="Završen posao = Da"/>
           <div style={{display:"flex",gap:12,marginBottom:20}}>
             <StatCard label="Završenih" value={zavrseniRows.length} color={T.green}/>
             <StatCard label="Ukupan obračun" value={zavrseniRows.reduce((s,p)=>s+(parseFloat(p.Obracun)||0),0).toLocaleString()+" RSD"} color={T.primary}/>
           </div>
-          <PosaoTable rows={zavrseniRows} canEdit={canEdit("zavrseni")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={deletePosao}/>
+          <PosaoTable rows={zavrseniRows} canEdit={canEdit("zavrseni")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id})}/>
         </>}
 
-        {/* ── RADIONICA ── */}
+        {/* RADIONICA */}
         {view==="radionica" && <>
           <PageHeader title="Radionica" subtitle="Status izrade se menja samo ovde"/>
           <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
             <table style={{width:"100%",borderCollapse:"collapse",background:T.surface}}>
               <thead><tr>{["Posao","Klijent","Šifra","Datum","Rok isporuke","Unosilac","Opis","Status izrade"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
               <tbody>
-                {radionicaRows.length===0
-                  ? <tr><td colSpan={8} style={{...tdS,textAlign:"center",color:T.textSoft,padding:40}}>Nema poslova</td></tr>
-                  : radionicaRows.map((p,i)=>(
-                    <tr key={p.id} style={{background:i%2===0?T.surface:T.surfaceHover}} onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight} onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover}>
-                      <td style={{...tdS,color:T.primary,fontWeight:700}}>{p.Posao}</td>
-                      <td style={{...tdS,fontWeight:500}}>{p.KLIJENT}</td>
-                      <td style={{...tdS,color:T.textSoft,fontSize:12}}>{p.SifraKupca}</td>
-                      <td style={{...tdS,color:T.textMid,fontSize:12}}>{fmtDate(p.DatumUnosa)}</td>
-                      <td style={{...tdS,color:isOverdue(p.RokZaIsporuku)?T.red:T.textMid,fontWeight:isOverdue(p.RokZaIsporuku)?600:400,fontSize:12}}>{fmtDate(p.RokZaIsporuku)}</td>
-                      <td style={{...tdS,color:T.textMid}}>{p.Unosilac}</td>
-                      <td style={{...tdS,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:T.textMid}}>{p.Opis}</td>
-                      <td style={tdS}>
-                        <InlineCheck val={p.StatusIzrade} onChange={v=>canEdit("radionica")&&inlineUpdate(p.id,"StatusIzrade",v)} disabled={!canEdit("radionica")}/>
-                      </td>
-                    </tr>
-                  ))
-                }
+                {poslovi.length===0?<tr><td colSpan={8} style={{...tdS,textAlign:"center",color:T.textSoft,padding:40}}>Nema poslova</td></tr>
+                :poslovi.map((p,i)=>(
+                  <tr key={p.id} style={{background:i%2===0?T.surface:T.surfaceHover}} onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight} onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover}>
+                    <td style={{...tdS,color:T.primary,fontWeight:700}}>{p.Posao}</td>
+                    <td style={{...tdS,fontWeight:500}}>{p.KLIJENT}</td>
+                    <td style={{...tdS,color:T.textSoft,fontSize:12}}>{p.SifraKupca}</td>
+                    <td style={{...tdS,color:T.textMid,fontSize:12}}>{fmtDate(p.DatumUnosa)}</td>
+                    <td style={{...tdS,color:isOverdue(p.RokZaIsporuku)?T.red:T.textMid,fontWeight:isOverdue(p.RokZaIsporuku)?600:400,fontSize:12}}>{fmtDate(p.RokZaIsporuku)}</td>
+                    <td style={{...tdS,color:T.textMid}}>{p.Unosilac}</td>
+                    <td style={{...tdS,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:T.textMid}}>{p.Opis}</td>
+                    <td style={tdS}><InlineCheck val={p.StatusIzrade} onChange={v=>canEdit("radionica")&&inlineUpdate(p.id,"StatusIzrade",v)} disabled={!canEdit("radionica")}/></td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </>}
 
-        {/* ── MONTAŽA ── */}
+        {/* MONTAŽA */}
         {view==="montaza" && <>
-          <PageHeader title="Montaža" subtitle="Poslovi sa montažom · Status montaže se menja samo ovde"/>
+          <PageHeader title="Montaža" subtitle="Status montaže se menja samo ovde"/>
           <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
             <table style={{width:"100%",borderCollapse:"collapse",background:T.surface}}>
               <thead><tr>{["Posao","Klijent","Šifra kupca","Datum","Rok isporuke","Unosilac","Opis","Status montaže"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
               <tbody>
-                {montazaRows.length===0
-                  ? <tr><td colSpan={8} style={{...tdS,textAlign:"center",color:T.textSoft,padding:40}}>Nema poslova za montažu</td></tr>
-                  : montazaRows.map((p,i)=>(
-                    <tr key={p.id} style={{background:i%2===0?T.surface:T.surfaceHover}} onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight} onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover}>
-                      <td style={{...tdS,color:T.primary,fontWeight:700}}>{p.Posao}</td>
-                      <td style={{...tdS,fontWeight:500}}>{p.KLIJENT}</td>
-                      <td style={{...tdS,color:T.textSoft,fontSize:12}}>{p.SifraKupca}</td>
-                      <td style={{...tdS,color:T.textMid,fontSize:12}}>{fmtDate(p.DatumUnosa)}</td>
-                      <td style={{...tdS,color:isOverdue(p.RokZaIsporuku)?T.red:T.textMid,fontWeight:isOverdue(p.RokZaIsporuku)?600:400,fontSize:12}}>{fmtDate(p.RokZaIsporuku)}</td>
-                      <td style={{...tdS,color:T.textMid}}>{p.Unosilac}</td>
-                      <td style={{...tdS,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:T.textMid}}>{p.Opis}</td>
-                      <td style={tdS}>
-                        <InlineCheck val={p.StatusMontaze} onChange={v=>canEdit("montaza")&&inlineUpdate(p.id,"StatusMontaze",v)} disabled={!canEdit("montaza")}/>
-                      </td>
-                    </tr>
-                  ))
-                }
+                {montazaRows.length===0?<tr><td colSpan={8} style={{...tdS,textAlign:"center",color:T.textSoft,padding:40}}>Nema poslova za montažu</td></tr>
+                :montazaRows.map((p,i)=>(
+                  <tr key={p.id} style={{background:i%2===0?T.surface:T.surfaceHover}} onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight} onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover}>
+                    <td style={{...tdS,color:T.primary,fontWeight:700}}>{p.Posao}</td>
+                    <td style={{...tdS,fontWeight:500}}>{p.KLIJENT}</td>
+                    <td style={{...tdS,color:T.textSoft,fontSize:12}}>{p.SifraKupca}</td>
+                    <td style={{...tdS,color:T.textMid,fontSize:12}}>{fmtDate(p.DatumUnosa)}</td>
+                    <td style={{...tdS,color:isOverdue(p.RokZaIsporuku)?T.red:T.textMid,fontWeight:isOverdue(p.RokZaIsporuku)?600:400,fontSize:12}}>{fmtDate(p.RokZaIsporuku)}</td>
+                    <td style={{...tdS,color:T.textMid}}>{p.Unosilac}</td>
+                    <td style={{...tdS,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:T.textMid}}>{p.Opis}</td>
+                    <td style={tdS}><InlineCheck val={p.StatusMontaze} onChange={v=>canEdit("montaza")&&inlineUpdate(p.id,"StatusMontaze",v)} disabled={!canEdit("montaza")}/></td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </>}
 
-        {/* ── ISPORUKA ── */}
+        {/* ISPORUKA */}
         {view==="isporuka" && <>
-          <PageHeader title="Isporuka" subtitle="Poslovi za isporuku · Status isporuke se menja samo ovde"/>
+          <PageHeader title="Isporuka" subtitle="Status isporuke se menja samo ovde"/>
           <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
             <table style={{width:"100%",borderCollapse:"collapse",background:T.surface}}>
               <thead><tr>{["Posao","Klijent","Šifra kupca","Datum","Rok isporuke","Unosilac","Opis","Status isporuke"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
               <tbody>
-                {isporukaRows.length===0
-                  ? <tr><td colSpan={8} style={{...tdS,textAlign:"center",color:T.textSoft,padding:40}}>Nema poslova za isporuku</td></tr>
-                  : isporukaRows.map((p,i)=>(
-                    <tr key={p.id} style={{background:i%2===0?T.surface:T.surfaceHover}} onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight} onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover}>
-                      <td style={{...tdS,color:T.primary,fontWeight:700}}>{p.Posao}</td>
-                      <td style={{...tdS,fontWeight:500}}>{p.KLIJENT}</td>
-                      <td style={{...tdS,color:T.textSoft,fontSize:12}}>{p.SifraKupca}</td>
-                      <td style={{...tdS,color:T.textMid,fontSize:12}}>{fmtDate(p.DatumUnosa)}</td>
-                      <td style={{...tdS,color:isOverdue(p.RokZaIsporuku)?T.red:T.textMid,fontWeight:isOverdue(p.RokZaIsporuku)?600:400,fontSize:12}}>{fmtDate(p.RokZaIsporuku)}</td>
-                      <td style={{...tdS,color:T.textMid}}>{p.Unosilac}</td>
-                      <td style={{...tdS,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:T.textMid}}>{p.Opis}</td>
-                      <td style={tdS}>
-                        <InlineCheck val={p.StatusIsporuke} onChange={v=>canEdit("isporuka")&&inlineUpdate(p.id,"StatusIsporuke",v)} disabled={!canEdit("isporuka")}/>
-                      </td>
-                    </tr>
-                  ))
-                }
+                {isporukaRows.length===0?<tr><td colSpan={8} style={{...tdS,textAlign:"center",color:T.textSoft,padding:40}}>Nema poslova za isporuku</td></tr>
+                :isporukaRows.map((p,i)=>(
+                  <tr key={p.id} style={{background:i%2===0?T.surface:T.surfaceHover}} onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight} onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover}>
+                    <td style={{...tdS,color:T.primary,fontWeight:700}}>{p.Posao}</td>
+                    <td style={{...tdS,fontWeight:500}}>{p.KLIJENT}</td>
+                    <td style={{...tdS,color:T.textSoft,fontSize:12}}>{p.SifraKupca}</td>
+                    <td style={{...tdS,color:T.textMid,fontSize:12}}>{fmtDate(p.DatumUnosa)}</td>
+                    <td style={{...tdS,color:isOverdue(p.RokZaIsporuku)?T.red:T.textMid,fontWeight:isOverdue(p.RokZaIsporuku)?600:400,fontSize:12}}>{fmtDate(p.RokZaIsporuku)}</td>
+                    <td style={{...tdS,color:T.textMid}}>{p.Unosilac}</td>
+                    <td style={{...tdS,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:T.textMid}}>{p.Opis}</td>
+                    <td style={tdS}><InlineCheck val={p.StatusIsporuke} onChange={v=>canEdit("isporuka")&&inlineUpdate(p.id,"StatusIsporuke",v)} disabled={!canEdit("isporuka")}/></td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </>}
 
-        {/* ── KNJIŽENJE ── */}
+        {/* KNJIŽENJE */}
         {view==="knjizenje" && <>
-          <PageHeader title="Knjiženje" subtitle="Završeni poslovi sa plaćanjem Faktura · Fakturisano se menja samo ovde"/>
+          <PageHeader title="Knjiženje" subtitle="Završeni poslovi sa Fakturom · Fakturisano se menja samo ovde"/>
           <div style={{display:"flex",gap:12,marginBottom:20}}>
             <StatCard label="Za knjiženje" value={knjigenjeRows.length} color={T.primary}/>
             <StatCard label="Fakturisano" value={knjigenjeRows.filter(p=>p.Fakturisano).length} color={T.green}/>
@@ -674,29 +830,25 @@ export default function App() {
             <table style={{width:"100%",borderCollapse:"collapse",background:T.surface}}>
               <thead><tr>{["Posao","Klijent","Šifra kupca","Datum","Opis","Specifikacija cene","Obračun","Fakturisano"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
               <tbody>
-                {knjigenjeRows.length===0
-                  ? <tr><td colSpan={8} style={{...tdS,textAlign:"center",color:T.textSoft,padding:40}}>Nema poslova za knjiženje</td></tr>
-                  : knjigenjeRows.map((p,i)=>(
-                    <tr key={p.id} style={{background:p.Fakturisano?T.greenBg:i%2===0?T.surface:T.surfaceHover}} onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight} onMouseLeave={e=>e.currentTarget.style.background=p.Fakturisano?T.greenBg:i%2===0?T.surface:T.surfaceHover}>
-                      <td style={{...tdS,color:T.primary,fontWeight:700}}>{p.Posao}</td>
-                      <td style={{...tdS,fontWeight:500}}>{p.KLIJENT}</td>
-                      <td style={{...tdS,color:T.textSoft,fontSize:12}}>{p.SifraKupca}</td>
-                      <td style={{...tdS,color:T.textMid,fontSize:12}}>{fmtDate(p.DatumUnosa)}</td>
-                      <td style={{...tdS,maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:T.textMid}}>{p.Opis}</td>
-                      <td style={{...tdS,color:T.textMid,fontSize:12,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.SpecifikacijaCene||"—"}</td>
-                      <td style={{...tdS,fontWeight:700,color:T.green}}>{p.Obracun?`${parseFloat(p.Obracun).toLocaleString()} RSD`:"—"}</td>
-                      <td style={tdS}>
-                        <InlineCheck val={p.Fakturisano} onChange={v=>canEdit("knjizenje")&&inlineUpdate(p.id,"Fakturisano",v)} disabled={!canEdit("knjizenje")}/>
-                      </td>
-                    </tr>
-                  ))
-                }
+                {knjigenjeRows.length===0?<tr><td colSpan={8} style={{...tdS,textAlign:"center",color:T.textSoft,padding:40}}>Nema poslova za knjiženje</td></tr>
+                :knjigenjeRows.map((p,i)=>(
+                  <tr key={p.id} style={{background:p.Fakturisano?T.greenBg:i%2===0?T.surface:T.surfaceHover}} onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight} onMouseLeave={e=>e.currentTarget.style.background=p.Fakturisano?T.greenBg:i%2===0?T.surface:T.surfaceHover}>
+                    <td style={{...tdS,color:T.primary,fontWeight:700}}>{p.Posao}</td>
+                    <td style={{...tdS,fontWeight:500}}>{p.KLIJENT}</td>
+                    <td style={{...tdS,color:T.textSoft,fontSize:12}}>{p.SifraKupca}</td>
+                    <td style={{...tdS,color:T.textMid,fontSize:12}}>{fmtDate(p.DatumUnosa)}</td>
+                    <td style={{...tdS,maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:T.textMid}}>{p.Opis}</td>
+                    <td style={{...tdS,color:T.textMid,fontSize:12,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.SpecifikacijaCene||"—"}</td>
+                    <td style={{...tdS,fontWeight:700,color:T.green}}>{p.Obracun?`${parseFloat(p.Obracun).toLocaleString()} RSD`:"—"}</td>
+                    <td style={tdS}><InlineCheck val={p.Fakturisano} onChange={v=>canEdit("knjizenje")&&inlineUpdate(p.id,"Fakturisano",v)} disabled={!canEdit("knjizenje")}/></td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </>}
 
-        {/* ── KUPCI ── */}
+        {/* KUPCI */}
         {view==="kupci" && <>
           <PageHeader title="Kupci" subtitle="Baza klijenata" action={canEdit("kupci")&&<button onClick={openNewKupac} style={btnS("primary")}>+ Novi kupac</button>}/>
           <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
@@ -716,7 +868,7 @@ export default function App() {
                     <td style={tdS} onClick={e=>e.stopPropagation()}>
                       <div style={{display:"flex",gap:5}}>
                         {canEdit("kupci")
-                          ? <><button onClick={()=>openEditKupac(k)} style={btnS("edit")}>Uredi</button><button onClick={()=>deleteKupac(k.id)} style={btnS("danger")}>Briši</button></>
+                          ? <><button onClick={()=>openEditKupac(k)} style={btnS("edit")}>Uredi</button><button onClick={()=>setConfirmDelete({type:"kupac",id:k.id})} style={btnS("danger")}>Briši</button></>
                           : <button onClick={()=>setViewingKupac(k)} style={btnS("ghost")}>Pregled</button>
                         }
                       </div>
@@ -728,9 +880,9 @@ export default function App() {
           </div>
         </>}
 
-        {/* ── OBRAČUN ── */}
+        {/* OBRAČUN */}
         {view==="obracun" && <>
-          <PageHeader title="Obračun po načinu plaćanja" subtitle="Sumarni pregled grupisanih obračuna"/>
+          <PageHeader title="Obračun po načinu plaćanja"/>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12,marginBottom:24}}>
             {Object.entries(obracunSums).map(([nacin,suma])=>(
               <StatCard key={nacin} label={nacin} value={suma.toLocaleString()+" RSD"} color={placanjeColor(nacin)} sub={`${poslovi.filter(p=>p.Placanje===nacin).length} poslova`}/>
@@ -757,34 +909,30 @@ export default function App() {
           </div>
         </>}
 
-        {/* ── KORISNICI ── */}
+        {/* KORISNICI */}
         {view==="korisnici" && <>
-          <PageHeader title="Korisnici" subtitle="Nalozi i dozvole" action={currentUser.isAdmin&&<button onClick={openNewUser} style={btnS("primary")}>+ Novi korisnik</button>}/>
+          <PageHeader title="Korisnici" subtitle="Nalozi i dozvole — Novi korisnici se dodaju u Supabase Authentication"/>
           <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
             <table style={{width:"100%",borderCollapse:"collapse",background:T.surface}}>
-              <thead><tr>{["Ime","Prezime","Kor. ime","Telefon","Adresa","Rola","Dozvole",...(currentUser.isAdmin?[""]:[])].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+              <thead><tr>{["Ime","Prezime","Telefon","Adresa","Rola","Dozvole",...(profile.is_admin?[""]:[])].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
               <tbody>
                 {users.map((u,i)=>(
                   <tr key={u.id} style={{background:i%2===0?T.surface:T.surfaceHover}} onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight} onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover}>
                     <td style={{...tdS,fontWeight:600}}>{u.ime}</td>
                     <td style={tdS}>{u.prezime}</td>
-                    <td style={{...tdS,color:T.primary,fontWeight:600}}>{u.username}</td>
                     <td style={{...tdS,color:T.textMid}}>{u.telefon}</td>
                     <td style={{...tdS,color:T.textMid,fontSize:12}}>{u.adresa}</td>
-                    <td style={tdS}>{u.isAdmin?<span style={{background:T.primaryLight,color:T.primary,border:`1px solid ${T.primaryBorder}`,borderRadius:5,padding:"2px 9px",fontSize:11,fontWeight:600}}>Admin</span>:<span style={{background:T.surfaceRaised,color:T.textMid,border:`1px solid ${T.border}`,borderRadius:5,padding:"2px 9px",fontSize:11,fontWeight:600}}>Korisnik</span>}</td>
+                    <td style={tdS}>{u.is_admin?<span style={{background:T.primaryLight,color:T.primary,border:`1px solid ${T.primaryBorder}`,borderRadius:5,padding:"2px 9px",fontSize:11,fontWeight:600}}>Admin</span>:<span style={{background:T.surfaceRaised,color:T.textMid,border:`1px solid ${T.border}`,borderRadius:5,padding:"2px 9px",fontSize:11,fontWeight:600}}>Korisnik</span>}</td>
                     <td style={tdS}>
                       <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
-                        {ALL_TABS.map(t=>{const p=u.tabPermissions[t.key];if(p==="none")return null;
+                        {ALL_TABS.map(t=>{const p=u.tab_permissions?.[t.key];if(!p||p==="none")return null;
                           return <span key={t.key} style={{background:p==="edit"?T.greenBg:T.amberBg,color:p==="edit"?T.green:T.amber,border:`1px solid ${p==="edit"?T.greenBorder:T.amberBorder}`,borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:600}}>{t.label}</span>;
                         })}
                       </div>
                     </td>
-                    {currentUser.isAdmin && (
+                    {profile.is_admin && (
                       <td style={tdS} onClick={e=>e.stopPropagation()}>
-                        <div style={{display:"flex",gap:5}}>
-                          <button onClick={()=>openEditUser(u)} style={btnS("edit")}>Uredi</button>
-                          {u.id!==currentUser.id&&<button onClick={()=>deleteUser(u.id)} style={btnS("danger")}>Briši</button>}
-                        </div>
+                        <button onClick={()=>openEditUser(u)} style={btnS("edit")}>Uredi dozvole</button>
                       </td>
                     )}
                   </tr>
@@ -792,6 +940,11 @@ export default function App() {
               </tbody>
             </table>
           </div>
+          <div style={{marginTop:12,padding:"12px 16px",background:T.amberBg,border:`1px solid ${T.amberBorder}`,borderRadius:T.radiusSm,color:T.amber,fontSize:12,fontFamily:T.fontBody}}>
+            💡 Novi korisnici se kreiraju u <strong>Supabase → Authentication → Add user</strong>. Nakon kreiranja, pojave se ovde i možete im podesiti dozvole.
+          </div>
+        </>}
+
         </>}
       </div>
 
@@ -801,7 +954,7 @@ export default function App() {
           <PosaoForm/>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:22,borderTop:`1px solid ${T.border}`,paddingTop:18}}>
             <button onClick={closeModal} style={btnS("ghost")}>Otkaži</button>
-            <button onClick={savePosao} style={btnS("primary")}>Sačuvaj</button>
+            <button onClick={savePosao} disabled={saving} style={{...btnS("primary"),opacity:saving?0.6:1}}>{saving?"Snima...":"Sačuvaj"}</button>
           </div>
         </Modal>
       )}
@@ -826,17 +979,12 @@ export default function App() {
             </div>
             {divider("Finansije i plaćanje")}
             {df("Obračun",viewingPosao.Obracun?`${parseFloat(viewingPosao.Obracun).toLocaleString()} RSD`:"—",T.green)}
-            <div style={{marginBottom:16}}>
-              <div style={{color:T.textSoft,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Plaćanje</div>
-              <PlacanjeBadge val={viewingPosao.Placanje}/>
-            </div>
+            <div style={{marginBottom:16}}><div style={{color:T.textSoft,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Plaćanje</div><PlacanjeBadge val={viewingPosao.Placanje}/></div>
             {divider("Statusi")}
-            <div style={{marginBottom:14}}><div style={{color:T.textSoft,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Poslati na izradu</div><span style={{background:T.surfaceRaised,color:T.textMid,border:`1px solid ${T.border}`,borderRadius:5,padding:"2px 9px",fontSize:11,fontWeight:600}}>{viewingPosao.PoslatiNaIzradu||"—"}</span></div>
-            <div style={{marginBottom:14}}><div style={{color:T.textSoft,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Montaža/Isporuka</div><span style={{color:T.textMid,fontSize:13}}>{viewingPosao.MontazaIsporuka||"—"}</span></div>
-            <div style={{marginBottom:14}}><div style={{color:T.textSoft,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Status izrade</div><CheckBadge val={viewingPosao.StatusIzrade}/></div>
-            <div style={{marginBottom:14}}><div style={{color:T.textSoft,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Status isporuke</div><CheckBadge val={viewingPosao.StatusIsporuke}/></div>
-            <div style={{marginBottom:14}}><div style={{color:T.textSoft,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Status montaže</div><CheckBadge val={viewingPosao.StatusMontaze}/></div>
-            <div style={{marginBottom:14}}><div style={{color:T.textSoft,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Završen posao</div><CheckBadge val={viewingPosao.ZavrsenPosao}/></div>
+            <div style={{marginBottom:14}}><div style={{color:T.textSoft,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>St. izrade</div><CheckBadge val={viewingPosao.StatusIzrade}/></div>
+            <div style={{marginBottom:14}}><div style={{color:T.textSoft,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>St. isporuke</div><CheckBadge val={viewingPosao.StatusIsporuke}/></div>
+            <div style={{marginBottom:14}}><div style={{color:T.textSoft,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>St. montaže</div><CheckBadge val={viewingPosao.StatusMontaze}/></div>
+            <div style={{marginBottom:14}}><div style={{color:T.textSoft,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Završen</div><CheckBadge val={viewingPosao.ZavrsenPosao}/></div>
             <div style={{marginBottom:14}}><div style={{color:T.textSoft,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Fakturisano</div><CheckBadge val={viewingPosao.Fakturisano}/></div>
           </div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:16,borderTop:`1px solid ${T.border}`,paddingTop:16}}>
@@ -861,7 +1009,7 @@ export default function App() {
           </div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:22,borderTop:`1px solid ${T.border}`,paddingTop:18}}>
             <button onClick={closeModal} style={btnS("ghost")}>Otkaži</button>
-            <button onClick={saveKupac} style={btnS("primary")}>Sačuvaj</button>
+            <button onClick={saveKupac} disabled={saving} style={{...btnS("primary"),opacity:saving?0.6:1}}>{saving?"Snima...":"Sačuvaj"}</button>
           </div>
         </Modal>
       )}
@@ -896,54 +1044,44 @@ export default function App() {
         </Modal>
       )}
 
-      {/* ═══ EDIT/NEW USER ═══ */}
-      {(editingUser||newUser) && (
-        <Modal title={newUser?"Novi korisnik":`Uredi: ${tempData.ime} ${tempData.prezime}`} onClose={closeModal} wide>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 22px"}}>
+      {/* ═══ EDIT USER PERMISSIONS ═══ */}
+      {editingUser && (
+        <Modal title={`Dozvole: ${tempData.ime} ${tempData.prezime}`} onClose={closeModal} wide>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 22px",marginBottom:16}}>
             <Field label="Ime" value={tempData.ime} onChange={tf("ime")} error={tempErrors.ime}/>
             <Field label="Prezime" value={tempData.prezime} onChange={tf("prezime")} error={tempErrors.prezime}/>
-            <Field label="Korisničko ime" value={tempData.username} onChange={tf("username")} error={tempErrors.username}/>
             <Field label="Telefon" value={tempData.telefon} onChange={tf("telefon")}/>
             <div style={{gridColumn:"1/-1"}}><Field label="Adresa" value={tempData.adresa} onChange={tf("adresa")}/></div>
-            <Field label={newUser?"Lozinka":"Nova lozinka (prazno = bez promene)"} value={tempData.password||""} onChange={tf("password")} type="password" error={tempErrors.password}/>
-            <Field label="Potvrda lozinke" value={tempData.passwordConfirm||""} onChange={tf("passwordConfirm")} type="password" error={tempErrors.passwordConfirm}/>
-            <div style={{gridColumn:"1/-1"}}>
-              <div style={{background:T.amberBg,border:`1px solid ${T.amberBorder}`,borderRadius:T.radiusSm,padding:"9px 13px",color:T.amber,fontSize:12,marginBottom:4}}>
-                Lozinka: min <strong>8 karaktera</strong> i bar <strong>1 veliko slovo</strong>
-              </div>
-            </div>
-            <div style={{gridColumn:"1/-1",marginTop:8}}>
-              <div style={{color:T.text,fontSize:13,fontWeight:600,marginBottom:10,fontFamily:T.fontHead}}>Dozvole po karticama</div>
-              <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,overflow:"hidden"}}>
-                <table style={{width:"100%",borderCollapse:"collapse"}}>
-                  <thead><tr><th style={thS}>Kartica</th><th style={thS}>Dozvola</th></tr></thead>
-                  <tbody>
-                    {ALL_TABS.map((t,i)=>(
-                      <tr key={t.key} style={{background:i%2===0?T.surface:T.surfaceHover}} onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight} onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover}>
-                        <td style={{...tdS,fontWeight:500,fontSize:12}}>{t.icon} {t.label}</td>
-                        <td style={tdS}>
-                          <div style={{display:"flex",gap:8}}>
-                            {[["none","Nema",T.red,T.redBg,T.redBorder],["view","Pregledaj",T.amber,T.amberBg,T.amberBorder],["edit","Uredi",T.green,T.greenBg,T.greenBorder]].map(([p,lbl,col,bg,bdr])=>{
-                              const active=tempData.tabPermissions?.[t.key]===p;
-                              return (
-                                <label key={p} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",background:active?bg:"none",border:`1px solid ${active?bdr:T.border}`,borderRadius:T.radiusSm,padding:"3px 9px",transition:"all 0.12s"}}>
-                                  <input type="radio" name={`perm_${t.key}`} value={p} checked={active} onChange={()=>setTempData(d=>({...d,tabPermissions:{...d.tabPermissions,[t.key]:p}}))} style={{accentColor:col,margin:0}}/>
-                                  <span style={{color:active?col:T.textSoft,fontSize:11,fontWeight:active?600:400,fontFamily:T.fontBody}}>{lbl}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+          </div>
+          <div style={{color:T.text,fontSize:13,fontWeight:600,marginBottom:10,fontFamily:T.fontHead}}>Dozvole po karticama</div>
+          <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,overflow:"hidden"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr><th style={thS}>Kartica</th><th style={thS}>Dozvola</th></tr></thead>
+              <tbody>
+                {ALL_TABS.map((t,i)=>(
+                  <tr key={t.key} style={{background:i%2===0?T.surface:T.surfaceHover}} onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight} onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover}>
+                    <td style={{...tdS,fontWeight:500,fontSize:12}}>{t.icon} {t.label}</td>
+                    <td style={tdS}>
+                      <div style={{display:"flex",gap:8}}>
+                        {[["none","Nema",T.red,T.redBg,T.redBorder],["view","Pregledaj",T.amber,T.amberBg,T.amberBorder],["edit","Uredi",T.green,T.greenBg,T.greenBorder]].map(([p,lbl,col,bg,bdr])=>{
+                          const active=tempData.tab_permissions?.[t.key]===p;
+                          return (
+                            <label key={p} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",background:active?bg:"none",border:`1px solid ${active?bdr:T.border}`,borderRadius:T.radiusSm,padding:"3px 9px",transition:"all 0.12s"}}>
+                              <input type="radio" name={`perm_${t.key}`} value={p} checked={active} onChange={()=>setTempData(d=>({...d,tab_permissions:{...d.tab_permissions,[t.key]:p}}))} style={{accentColor:col,margin:0}}/>
+                              <span style={{color:active?col:T.textSoft,fontSize:11,fontWeight:active?600:400,fontFamily:T.fontBody}}>{lbl}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:22,borderTop:`1px solid ${T.border}`,paddingTop:18}}>
             <button onClick={closeModal} style={btnS("ghost")}>Otkaži</button>
-            <button onClick={saveUser} style={btnS("primary")}>Sačuvaj</button>
+            <button onClick={saveUser} disabled={saving} style={{...btnS("primary"),opacity:saving?0.6:1}}>{saving?"Snima...":"Sačuvaj"}</button>
           </div>
         </Modal>
       )}
@@ -955,7 +1093,7 @@ export default function App() {
             <div style={{width:48,height:48,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 18px",fontSize:20}}>🗑</div>
             <h3 style={{color:T.text,fontFamily:T.fontHead,margin:"0 0 8px",fontSize:19,fontWeight:700}}>Potvrda brisanja</h3>
             <p style={{color:T.textMid,fontSize:13,margin:"0 0 24px",lineHeight:1.6,fontFamily:T.fontBody}}>
-              Da li ste sigurni da želite da obrišete {confirmDelete.type==="posao"?"ovaj posao":confirmDelete.type==="kupac"?"ovog kupca":"ovog korisnika"}? Ova akcija se ne može poništiti.
+              Da li ste sigurni? Ova akcija se ne može poništiti.
             </p>
             <div style={{display:"flex",gap:10,justifyContent:"center"}}>
               <button onClick={()=>setConfirmDelete(null)} style={btnS("ghost")}>Otkaži</button>
