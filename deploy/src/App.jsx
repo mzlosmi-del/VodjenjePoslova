@@ -448,16 +448,25 @@ function useTableControls(viewKey, defaultCols) {
 }
 
 // ── POSAO TABLE ───────────────────────────────────────────────────────────────
+// priority: 1=always show, 2=hide on tablet, 3=hide on narrow, 4=hidden by default
 const POSAO_COLS_DEFAULT = [
-  {key:"Posao",visible:true,label:"Posao"},{key:"KLIJENT",visible:true,label:"Klijent"},
-  {key:"SifraKupca",visible:true,label:"Šifra"},{key:"DatumUnosa",visible:true,label:"Datum"},
-  {key:"RokZaIsporuku",visible:true,label:"Rok isporuke"},{key:"Unosilac",visible:true,label:"Unosilac"},
-  {key:"Opis",visible:true,label:"Opis"},{key:"PoslatiNaIzradu",visible:true,label:"Poslati"},
-  {key:"MontazaIsporuka",visible:true,label:"Montaža/Isporuka"},{key:"Placanje",visible:true,label:"Plaćanje"},
-  {key:"StatusIzrade",visible:true,label:"St. izrade"},{key:"StatusIsporuke",visible:true,label:"St. isporuke"},
-  {key:"StatusMontaze",visible:true,label:"St. montaže"},{key:"SpecifikacijaCene",visible:true,label:"Specifikacija"},
-  {key:"Obracun",visible:true,label:"Obračun"},{key:"ZavrsenPosao",visible:true,label:"Završen"},
-  {key:"Fakturisano",visible:false,label:"Fakturisano"},
+  {key:"Posao",visible:true,label:"Posao",priority:1,w:90},
+  {key:"KLIJENT",visible:true,label:"Klijent",priority:1,w:130},
+  {key:"SifraKupca",visible:true,label:"Šifra",priority:3,w:70},
+  {key:"DatumUnosa",visible:true,label:"Datum",priority:3,w:80},
+  {key:"RokZaIsporuku",visible:true,label:"Rok",priority:2,w:80},
+  {key:"Unosilac",visible:true,label:"Unosilac",priority:3,w:90},
+  {key:"Opis",visible:true,label:"Opis",priority:2,w:120},
+  {key:"PoslatiNaIzradu",visible:true,label:"Poslati",priority:3,w:80},
+  {key:"MontazaIsporuka",visible:true,label:"Montaža/Isp.",priority:2,w:110},
+  {key:"Placanje",visible:true,label:"Plaćanje",priority:2,w:90},
+  {key:"StatusIzrade",visible:true,label:"Izrada",priority:1,w:70},
+  {key:"StatusIsporuke",visible:true,label:"Isporuka",priority:2,w:75},
+  {key:"StatusMontaze",visible:true,label:"Montaža",priority:3,w:75},
+  {key:"SpecifikacijaCene",visible:true,label:"Specifikacija",priority:3,w:100},
+  {key:"Obracun",visible:true,label:"Obračun",priority:2,w:100},
+  {key:"ZavrsenPosao",visible:true,label:"Završen",priority:1,w:70},
+  {key:"Fakturisano",visible:false,label:"Fakturisano",priority:4,w:80},
 ];
 
 function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZavrsen}) {
@@ -522,16 +531,30 @@ function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZ
     );
   }
 
+  // Filter cols by screen width priority
+  const {width} = useBreakpoint();
+  const activeCols = visibleCols.filter(col => {
+    if (!col.priority) return true;
+    if (col.priority===1) return true;
+    if (col.priority===2) return width >= 900;
+    if (col.priority===3) return width >= 1200;
+    return false; // priority 4 = never auto-show
+  });
+
   return (
     <>
       <ctrl.Toolbar/>
-      <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
-        <table style={{width:"100%",borderCollapse:"collapse",background:T.surface}}>
+      <div style={{borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow,overflow:"hidden"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",background:T.surface,tableLayout:"fixed"}}>
+          <colgroup>
+            {activeCols.map(col=><col key={col.key} style={{width:col.w?`${col.w}px`:undefined}}/>)}
+            <col style={{width:canEdit?"120px":"80px"}}/>
+          </colgroup>
           <thead>
             <tr>
-              {visibleCols.map(col=>(
+              {activeCols.map(col=>(
                 <th key={col.key} {...ctrl.thDraggable(col)}>
-                  <span style={{display:"flex",alignItems:"center"}}>{col.label}<ctrl.SortIcon colKey={col.key}/></span>
+                  <span style={{display:"flex",alignItems:"center",overflow:"hidden"}}>{col.label}<ctrl.SortIcon colKey={col.key}/></span>
                 </th>
               ))}
               <th style={thS}></th>
@@ -539,22 +562,22 @@ function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZ
           </thead>
           <tbody>
             {processed.length===0
-              ? <tr><td colSpan={visibleCols.length+1} style={{...tdS,textAlign:"center",color:T.textSoft,padding:40}}>Nema zapisa</td></tr>
+              ? <tr><td colSpan={activeCols.length+1} style={{...tdS,textAlign:"center",color:T.textSoft,padding:40}}>Nema zapisa</td></tr>
               : processed.map((p,i)=>(
                 <tr key={p.id} style={{cursor:"pointer",background:i%2===0?T.surface:T.surfaceHover}}
                   onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight}
                   onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover}
                   onDoubleClick={()=>onView(p)}>
-                  {visibleCols.map(col=>(
-                    <td key={col.key} style={tdS} onClick={col.key==="ZavrsenPosao"?e=>e.stopPropagation():undefined}>
+                  {activeCols.map(col=>(
+                    <td key={col.key} style={{...tdS,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:0}} onClick={col.key==="ZavrsenPosao"?e=>e.stopPropagation():undefined}>
                       {renderCell(p, col.key)}
                     </td>
                   ))}
-                  <td style={tdS} onClick={e=>e.stopPropagation()}>
+                  <td style={{...tdS,whiteSpace:"nowrap"}} onClick={e=>e.stopPropagation()}>
                     <div style={{display:"flex",gap:5}}>
                       {canEdit
-                        ? <><button onClick={()=>onEdit(p)} style={btnS("edit")}>Uredi</button><button onClick={()=>onDelete(p.id)} style={btnS("danger")}>Briši</button></>
-                        : <button onClick={()=>onView(p)} style={btnS("ghost")}>Pregled</button>}
+                        ? <><button onClick={()=>onEdit(p)} style={{...btnS("edit"),padding:"4px 9px",fontSize:11}}>Uredi</button><button onClick={()=>onDelete(p.id)} style={{...btnS("danger"),padding:"4px 9px",fontSize:11}}>Briši</button></>
+                        : <button onClick={()=>onView(p)} style={{...btnS("ghost"),padding:"4px 9px",fontSize:11}}>Pregled</button>}
                     </div>
                   </td>
                 </tr>
