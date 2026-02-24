@@ -745,24 +745,26 @@ function LoginScreen({onLogin}) {
     const {data, error:e} = await sb.auth.signInWithPassword({email, password});
     if (e) { setError(e.message); setLoading(false); return; }
 
-    // Check AAL — if nextLevel is aal2 and current is aal1, user has verified 2FA
+    // Debug: log what Supabase returns
     const {data: aal} = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (aal?.nextLevel === "aal2" && aal.currentLevel === "aal1") {
-      const {data: factors} = await sb.auth.mfa.listFactors();
-      const totp = factors?.totp?.find(f => f.status === "verified");
-      if (totp) {
-        const {data: challenge, error: ce} = await sb.auth.mfa.challenge({factorId: totp.id});
-        if (ce) { setError(ce.message); setLoading(false); return; }
-        setMfaSession({factorId: totp.id, challengeId: challenge.id});
-        setStep("totp");
-        setLoading(false);
-        return;
-      }
+    const {data: factors} = await sb.auth.mfa.listFactors();
+    console.log("AAL:", JSON.stringify(aal));
+    console.log("Factors:", JSON.stringify(factors));
+
+    const verifiedTotp = factors?.totp?.find(f => f.status === "verified");
+
+    if (verifiedTotp) {
+      // User has verified 2FA — challenge them
+      const {data: challenge, error: ce} = await sb.auth.mfa.challenge({factorId: verifiedTotp.id});
+      if (ce) { setError(ce.message); setLoading(false); return; }
+      setMfaSession({factorId: verifiedTotp.id, challengeId: challenge.id});
+      setStep("totp");
+      setLoading(false);
+      return;
     }
 
     // No verified 2FA — enroll now
-    const {data: factors2} = await sb.auth.mfa.listFactors();
-    const pending = factors2?.totp?.find(f => f.status !== "verified");
+    const pending = factors?.totp?.find(f => f.status !== "verified");
     if (pending) await sb.auth.mfa.unenroll({factorId: pending.id});
     const {data: enroll, error: ee} = await sb.auth.mfa.enroll({factorType: "totp"});
     if (ee) { setError(ee.message); setLoading(false); return; }
