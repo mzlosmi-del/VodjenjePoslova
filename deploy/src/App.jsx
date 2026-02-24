@@ -79,17 +79,6 @@ const ALL_TABS = [
 const montazaIsporukaOptions = ["Samo isporuka","Montaža i isporuka","Lično preuzimanje"];
 const placanjeOptions        = ["Faktura","Otpremnica","Zaduženje"];
 
-// ── responsive hook ───────────────────────────────────────────────────────────
-function useBreakpoint() {
-  const [w, setW] = useState(window.innerWidth);
-  useEffect(() => {
-    const h = () => setW(window.innerWidth);
-    window.addEventListener("resize", h);
-    return () => window.removeEventListener("resize", h);
-  }, []);
-  return { isMobile: w < 640, isTablet: w < 1024, width: w };
-}
-
 // ── shared styles ─────────────────────────────────────────────────────────────
 const thS = { padding:"10px 14px", textAlign:"left", color:T.text, fontSize:11,
   textTransform:"uppercase", letterSpacing:"0.07em", fontWeight:700,
@@ -305,13 +294,12 @@ function KupacSearchField({label, sifra, naziv, kupci, onChange}) {
 }
 
 function Modal({title,onClose,children,wide}) {
-  const {isMobile} = useBreakpoint();
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(6px)"}}>
-      <div style={{background:T.surface,borderRadius:isMobile?`${T.radiusLg} ${T.radiusLg} 0 0`:T.radiusLg,padding:isMobile?"20px 16px":"28px 32px",width:isMobile?"100%":undefined,minWidth:isMobile?undefined:wide?720:560,maxWidth:isMobile?"100%":"94vw",maxHeight:isMobile?"92vh":"92vh",overflowY:"auto",boxShadow:T.shadowLg,border:`1px solid ${T.border}`}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-          <h2 style={{color:T.text,fontFamily:T.fontHead,margin:0,fontSize:isMobile?17:19,fontWeight:700,letterSpacing:"-0.02em"}}>{title}</h2>
-          <button onClick={onClose} style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,color:T.textMid,cursor:"pointer",fontSize:18,width:32,height:32,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.70)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(6px)"}}>
+      <div style={{background:T.surface,borderRadius:T.radiusLg,padding:"28px 32px",minWidth:wide?720:560,maxWidth:"94vw",maxHeight:"92vh",overflowY:"auto",boxShadow:T.shadowLg,border:`1px solid ${T.border}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
+          <h2 style={{color:T.text,fontFamily:T.fontHead,margin:0,fontSize:19,fontWeight:700,letterSpacing:"-0.02em"}}>{title}</h2>
+          <button onClick={onClose} style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,color:T.textMid,cursor:"pointer",fontSize:18,width:30,height:30,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
         </div>
         {children}
       </div>
@@ -448,30 +436,20 @@ function useTableControls(viewKey, defaultCols) {
 }
 
 // ── POSAO TABLE ───────────────────────────────────────────────────────────────
-// priority: 1=always show, 2=hide on tablet, 3=hide on narrow, 4=hidden by default
 const POSAO_COLS_DEFAULT = [
-  {key:"Posao",visible:true,label:"Posao",priority:1,w:90},
-  {key:"KLIJENT",visible:true,label:"Klijent",priority:1,w:130},
-  {key:"SifraKupca",visible:true,label:"Šifra",priority:3,w:70},
-  {key:"DatumUnosa",visible:true,label:"Datum",priority:3,w:80},
-  {key:"RokZaIsporuku",visible:true,label:"Rok",priority:2,w:80},
-  {key:"Unosilac",visible:true,label:"Unosilac",priority:3,w:90},
-  {key:"Opis",visible:true,label:"Opis",priority:2,w:120},
-  {key:"PoslatiNaIzradu",visible:true,label:"Poslati",priority:3,w:80},
-  {key:"MontazaIsporuka",visible:true,label:"Montaža/Isp.",priority:2,w:110},
-  {key:"Placanje",visible:true,label:"Plaćanje",priority:2,w:90},
-  {key:"StatusIzrade",visible:true,label:"Izrada",priority:1,w:70},
-  {key:"StatusIsporuke",visible:true,label:"Isporuka",priority:2,w:75},
-  {key:"StatusMontaze",visible:true,label:"Montaža",priority:3,w:75},
-  {key:"SpecifikacijaCene",visible:true,label:"Specifikacija",priority:3,w:100},
-  {key:"Obracun",visible:true,label:"Obračun",priority:2,w:100},
-  {key:"ZavrsenPosao",visible:true,label:"Završen",priority:1,w:70},
-  {key:"Fakturisano",visible:false,label:"Fakturisano",priority:4,w:80},
+  {key:"Posao",visible:true,label:"Posao"},{key:"KLIJENT",visible:true,label:"Klijent"},
+  {key:"SifraKupca",visible:true,label:"Šifra"},{key:"DatumUnosa",visible:true,label:"Datum"},
+  {key:"RokZaIsporuku",visible:true,label:"Rok isporuke"},{key:"Unosilac",visible:true,label:"Unosilac"},
+  {key:"Opis",visible:true,label:"Opis"},{key:"PoslatiNaIzradu",visible:true,label:"Poslati"},
+  {key:"MontazaIsporuka",visible:true,label:"Montaža/Isporuka"},{key:"Placanje",visible:true,label:"Plaćanje"},
+  {key:"StatusIzrade",visible:true,label:"St. izrade"},{key:"StatusIsporuke",visible:true,label:"St. isporuke"},
+  {key:"StatusMontaze",visible:true,label:"St. montaže"},{key:"SpecifikacijaCene",visible:true,label:"Specifikacija"},
+  {key:"Obracun",visible:true,label:"Obračun"},{key:"ZavrsenPosao",visible:true,label:"Završen"},
+  {key:"Fakturisano",visible:false,label:"Fakturisano"},
 ];
 
 function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZavrsen}) {
   const ctrl = useTableControls(viewKey, POSAO_COLS_DEFAULT);
-  const {isMobile} = useBreakpoint();
   const visibleCols = ctrl.cols.filter(c=>c.visible);
   const processed = ctrl.filterAndSort(rows);
   const miColor = v => v==="Montaža i isporuka"?T.primary:v==="Samo isporuka"?T.green:T.purple;
@@ -499,62 +477,16 @@ function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZ
     }
   }
 
-  // Mobile card view
-  if (isMobile) {
-    return (
-      <>
-        <ctrl.Toolbar/>
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {processed.length===0
-            ? <div style={{textAlign:"center",color:T.textSoft,padding:40,fontFamily:T.fontBody}}>Nema zapisa</div>
-            : processed.map(p=>(
-              <div key={p.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"14px 16px",boxShadow:T.shadow}} onClick={()=>onView(p)}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                  <span style={{color:T.primary,fontWeight:700,fontSize:15,fontFamily:T.fontHead}}>{p.Posao}</span>
-                  <PlacanjeBadge val={p.Placanje}/>
-                </div>
-                <div style={{color:T.text,fontWeight:600,fontSize:14,marginBottom:3,fontFamily:T.fontBody}}>{p.KLIJENT}</div>
-                <div style={{color:T.textSoft,fontSize:12,marginBottom:8}}>{p.Opis}</div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
-                  <CheckBadge val={p.ZavrsenPosao}/><CheckBadge val={p.StatusIzrade}/>
-                </div>
-                <div style={{display:"flex",gap:6}} onClick={e=>e.stopPropagation()}>
-                  {canEdit
-                    ? <><button onClick={()=>onEdit(p)} style={btnS("edit")}>Uredi</button><button onClick={()=>onDelete(p.id)} style={btnS("danger")}>Briši</button></>
-                    : <button onClick={()=>onView(p)} style={btnS("ghost")}>Pregled</button>}
-                </div>
-              </div>
-            ))
-          }
-        </div>
-      </>
-    );
-  }
-
-  // Filter cols by screen width priority
-  const {width} = useBreakpoint();
-  const activeCols = visibleCols.filter(col => {
-    if (!col.priority) return true;
-    if (col.priority===1) return true;
-    if (col.priority===2) return width >= 900;
-    if (col.priority===3) return width >= 1200;
-    return false; // priority 4 = never auto-show
-  });
-
   return (
     <>
       <ctrl.Toolbar/>
-      <div style={{borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow,overflow:"hidden"}}>
-        <table style={{width:"100%",borderCollapse:"collapse",background:T.surface,tableLayout:"fixed"}}>
-          <colgroup>
-            {activeCols.map(col=><col key={col.key} style={{width:col.w?`${col.w}px`:undefined}}/>)}
-            <col style={{width:canEdit?"120px":"80px"}}/>
-          </colgroup>
+      <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
+        <table style={{width:"100%",borderCollapse:"collapse",background:T.surface}}>
           <thead>
             <tr>
-              {activeCols.map(col=>(
+              {visibleCols.map(col=>(
                 <th key={col.key} {...ctrl.thDraggable(col)}>
-                  <span style={{display:"flex",alignItems:"center",overflow:"hidden"}}>{col.label}<ctrl.SortIcon colKey={col.key}/></span>
+                  <span style={{display:"flex",alignItems:"center"}}>{col.label}<ctrl.SortIcon colKey={col.key}/></span>
                 </th>
               ))}
               <th style={thS}></th>
@@ -562,22 +494,22 @@ function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZ
           </thead>
           <tbody>
             {processed.length===0
-              ? <tr><td colSpan={activeCols.length+1} style={{...tdS,textAlign:"center",color:T.textSoft,padding:40}}>Nema zapisa</td></tr>
+              ? <tr><td colSpan={visibleCols.length+1} style={{...tdS,textAlign:"center",color:T.textSoft,padding:40}}>Nema zapisa</td></tr>
               : processed.map((p,i)=>(
                 <tr key={p.id} style={{cursor:"pointer",background:i%2===0?T.surface:T.surfaceHover}}
                   onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight}
                   onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover}
                   onDoubleClick={()=>onView(p)}>
-                  {activeCols.map(col=>(
-                    <td key={col.key} style={{...tdS,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:0}} onClick={col.key==="ZavrsenPosao"?e=>e.stopPropagation():undefined}>
+                  {visibleCols.map(col=>(
+                    <td key={col.key} style={tdS} onClick={col.key==="ZavrsenPosao"?e=>e.stopPropagation():undefined}>
                       {renderCell(p, col.key)}
                     </td>
                   ))}
-                  <td style={{...tdS,whiteSpace:"nowrap"}} onClick={e=>e.stopPropagation()}>
+                  <td style={tdS} onClick={e=>e.stopPropagation()}>
                     <div style={{display:"flex",gap:5}}>
                       {canEdit
-                        ? <><button onClick={()=>onEdit(p)} style={{...btnS("edit"),padding:"4px 9px",fontSize:11}}>Uredi</button><button onClick={()=>onDelete(p.id)} style={{...btnS("danger"),padding:"4px 9px",fontSize:11}}>Briši</button></>
-                        : <button onClick={()=>onView(p)} style={{...btnS("ghost"),padding:"4px 9px",fontSize:11}}>Pregled</button>}
+                        ? <><button onClick={()=>onEdit(p)} style={btnS("edit")}>Uredi</button><button onClick={()=>onDelete(p.id)} style={btnS("danger")}>Briši</button></>
+                        : <button onClick={()=>onView(p)} style={btnS("ghost")}>Pregled</button>}
                     </div>
                   </td>
                 </tr>
@@ -592,34 +524,8 @@ function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZ
 
 function SimpleTable({rows, viewKey, columns, renderCell, emptyMsg="Nema zapisa"}) {
   const ctrl = useTableControls(viewKey, columns.map(c=>({key:c.key,label:c.label,visible:true})));
-  const {isMobile} = useBreakpoint();
   const visibleCols = ctrl.cols.filter(c=>c.visible);
   const processed = ctrl.filterAndSort(rows);
-
-  if (isMobile) {
-    const firstCol = columns[0]?.key;
-    const lastCol  = columns[columns.length-1]?.key;
-    return (
-      <>
-        <ctrl.Toolbar/>
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {processed.length===0
-            ? <div style={{textAlign:"center",color:T.textSoft,padding:40,fontFamily:T.fontBody}}>{emptyMsg}</div>
-            : processed.map(row=>(
-              <div key={row.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"14px 16px",boxShadow:T.shadow}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                  <div>{renderCell(row,firstCol)}</div>
-                  <div>{renderCell(row,lastCol)}</div>
-                </div>
-                <div style={{color:T.text,fontWeight:600,fontSize:13,marginBottom:4}}>{renderCell(row,"KLIJENT")}</div>
-                <div style={{color:T.textSoft,fontSize:12}}>{renderCell(row,"Opis")}</div>
-              </div>
-            ))
-          }
-        </div>
-      </>
-    );
-  }
 
   return (
     <>
@@ -662,31 +568,13 @@ const KUPCI_COLS_DEFAULT = [
 
 function KupciView({kupci, canEdit, onNew, onEdit, onDelete, onView}) {
   const ctrl = useTableControls("kupci", KUPCI_COLS_DEFAULT);
-  const {isMobile} = useBreakpoint();
   const visibleCols = ctrl.cols.filter(c=>c.visible);
   const processed = ctrl.filterAndSort(kupci);
   return (
     <>
       <PageHeader title="Kupci" subtitle="Baza klijenata" action={canEdit&&<button onClick={onNew} style={btnS("primary")}>+ Novi kupac</button>}/>
       <ctrl.Toolbar/>
-      {isMobile
-        ? <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {processed.map(k=>(
-              <div key={k.id} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"14px 16px"}} onClick={()=>onView(k)}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                  <span style={{color:T.primary,fontWeight:700,fontSize:13}}>{k.SifraKupca}</span>
-                  <span style={{color:T.textSoft,fontSize:12}}>{k.Grad}</span>
-                </div>
-                <div style={{color:T.text,fontWeight:600,fontSize:14,marginBottom:6}}>{k.Naziv}</div>
-                <div style={{display:"flex",gap:6}} onClick={e=>e.stopPropagation()}>
-                  {canEdit
-                    ? <><button onClick={()=>onEdit(k)} style={btnS("edit")}>Uredi</button><button onClick={()=>onDelete(k.id)} style={btnS("danger")}>Briši</button></>
-                    : <button onClick={()=>onView(k)} style={btnS("ghost")}>Pregled</button>}
-                </div>
-              </div>
-            ))}
-          </div>
-        : <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
+      <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
             <table style={{width:"100%",borderCollapse:"collapse",background:T.surface}}>
               <thead><tr>
                 {visibleCols.map(col=>(
@@ -726,297 +614,53 @@ function KupciView({kupci, canEdit, onNew, onEdit, onDelete, onView}) {
   );
 }
 
-// ── LOGIN + 2FA ───────────────────────────────────────────────────────────────
+// ── LOGIN ──────────────────────────────────────────────────────────────────────
 function LoginScreen({onLogin}) {
-  const [step,setStep]         = useState("login"); // "login" | "setup" | "totp"
-  const [email,setEmail]       = useState("");
-  const [password,setPassword] = useState("");
-  const [totpCode,setTotpCode] = useState("");
-  const [setupCode,setSetupCode] = useState("");
-  const [setupQr,setSetupQr]   = useState("");
-  const [setupSecret,setSetupSecret] = useState("");
-  const [error,setError]       = useState("");
-  const [showPw,setShowPw]     = useState(false);
-  const [loading,setLoading]   = useState(false);
-  const [mfaSession,setMfaSession] = useState(null);
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [error,setError]=useState("");
+  const [showPw,setShowPw]=useState(false);
+  const [loading,setLoading]=useState(false);
 
   async function handleLogin() {
     setLoading(true); setError("");
-    const {data, error:e} = await sb.auth.signInWithPassword({email, password});
+    const {data,error:e} = await sb.auth.signInWithPassword({email,password});
     if (e) { setError(e.message); setLoading(false); return; }
-
-    // Debug: log what Supabase returns
-    const {data: aal} = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
-    const {data: factors} = await sb.auth.mfa.listFactors();
-    console.log("AAL:", JSON.stringify(aal));
-    console.log("Factors:", JSON.stringify(factors));
-
-    const verifiedTotp = factors?.totp?.find(f => f.status === "verified");
-
-    if (verifiedTotp) {
-      // User has verified 2FA — challenge them
-      console.log("Challenging factor:", verifiedTotp.id);
-      const {data: challenge, error: ce} = await sb.auth.mfa.challenge({factorId: verifiedTotp.id});
-      console.log("Challenge result:", JSON.stringify(challenge), "Error:", JSON.stringify(ce));
-      if (ce) { setError("Challenge error: " + ce.message); setLoading(false); return; }
-      setMfaSession({factorId: verifiedTotp.id, challengeId: challenge.id});
-      setStep("totp");
-      setLoading(false);
-      return;
-    }
-
-    // No verified 2FA — enroll now
-    const pending = factors?.totp?.find(f => f.status !== "verified");
-    if (pending) await sb.auth.mfa.unenroll({factorId: pending.id});
-    const {data: enroll, error: ee} = await sb.auth.mfa.enroll({factorType: "totp"});
-    if (ee) { setError(ee.message); setLoading(false); return; }
-    setMfaSession({factorId: enroll.id});
-    setSetupQr(enroll.totp.qr_code);
-    setSetupSecret(enroll.totp.secret);
-    setSetupCode("");
-    setStep("setup");
-    setLoading(false);
-  }
-
-  async function handleSetupVerify() {
-    setLoading(true); setError("");
-    const {data: ch, error: ce} = await sb.auth.mfa.challenge({factorId: mfaSession.factorId});
-    if (ce) { setError(ce.message); setLoading(false); return; }
-    const {error: ve} = await sb.auth.mfa.verify({
-      factorId: mfaSession.factorId,
-      challengeId: ch.id,
-      code: setupCode.replace(/\s/g,""),
-    });
-    setLoading(false);
-    if (ve) { setError("Neispravan kod — pokušajte ponovo."); return; }
-    // Enrollment verified — now get session and log in
-    const {data: {session}} = await sb.auth.getSession();
-    onLogin(session.user);
-  }
-
-  async function handleTotp() {
-    setLoading(true); setError("");
-    const {data, error:e} = await sb.auth.mfa.verify({
-      factorId: mfaSession.factorId,
-      challengeId: mfaSession.challengeId,
-      code: totpCode.replace(/\s/g,""),
-    });
-    if (e) { setError("Neispravan kod: "+e.message); setLoading(false); return; }
     onLogin(data.user);
   }
 
-  const inp = {width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"11px 14px",color:T.text,fontSize:14,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"dark"};
-  const stepTitles = {login:"Dobrodošli nazad", setup:"Podesite dvofaktorsku zaštitu", totp:"Dvofaktorska autentikacija"};
-  const stepSubs   = {login:"Prijavite se na svoj nalog", setup:"Skenirajte QR kod i potvrdite", totp:"Unesite 6-cifreni kod iz aplikacije"};
-
+  const inp={width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"11px 14px",color:T.text,fontSize:14,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"dark"};
   return (
-    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0D1117 0%,#111827 50%,#0F172A 100%)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:T.fontBody,padding:"16px"}}>
+    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0D1117 0%,#111827 50%,#0F172A 100%)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:T.fontBody}}>
+
       <div style={{position:"fixed",top:-120,right:-120,width:400,height:400,background:"radial-gradient(circle,rgba(59,130,246,0.18) 0%,transparent 70%)",borderRadius:"50%",pointerEvents:"none"}}/>
       <div style={{position:"fixed",bottom:-80,left:-80,width:300,height:300,background:"radial-gradient(circle,rgba(167,139,250,0.14) 0%,transparent 70%)",borderRadius:"50%",pointerEvents:"none"}}/>
-      <div style={{background:T.surface,borderRadius:T.radiusLg,padding:"36px 32px",width:"100%",maxWidth:420,boxShadow:T.shadowLg,border:`1px solid ${T.border}`,position:"relative"}}>
-        <div style={{marginBottom:24}}>
-          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:T.primaryLight,border:`1px solid ${T.primaryBorder}`,borderRadius:T.radius,padding:"6px 12px",marginBottom:16}}>
+      <div style={{background:T.surface,borderRadius:T.radiusLg,padding:"40px 44px",width:400,boxShadow:T.shadowLg,border:`1px solid ${T.border}`,position:"relative"}}>
+        <div style={{marginBottom:32}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:T.primaryLight,border:`1px solid ${T.primaryBorder}`,borderRadius:T.radius,padding:"6px 12px",marginBottom:18}}>
             <div style={{width:7,height:7,background:T.primary,borderRadius:"50%"}}/>
             <span style={{color:T.primary,fontSize:11,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase"}}>Poslovi App</span>
           </div>
-          <h1 style={{fontFamily:T.fontHead,fontSize:24,fontWeight:800,color:T.text,margin:"0 0 5px",letterSpacing:"-0.04em"}}>{stepTitles[step]}</h1>
-          <p style={{color:T.textSoft,fontSize:13,margin:0}}>{stepSubs[step]}</p>
+          <h1 style={{fontFamily:T.fontHead,fontSize:26,fontWeight:800,color:T.text,margin:"0 0 6px",letterSpacing:"-0.04em"}}>Dobrodošli nazad</h1>
+          <p style={{color:T.textSoft,fontSize:13,margin:0}}>Prijavite se na svoj nalog</p>
         </div>
-
-        {/* Step 1 — Email + Password */}
-        {step==="login" && <>
-          <div style={{marginBottom:14}}>
-            <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:4}}>Email adresa</label>
-            <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&handleLogin()} style={inp} placeholder="vas@email.com"/>
+        <div style={{marginBottom:16}}>
+          <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:5}}>Email adresa</label>
+          <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&handleLogin()} style={inp} placeholder="vas@email.com"/>
+        </div>
+        <div style={{marginBottom:24}}>
+          <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:5}}>Lozinka</label>
+          <div style={{position:"relative"}}>
+            <input type={showPw?"text":"password"} value={password} onChange={e=>{setPassword(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&handleLogin()} style={{...inp,paddingRight:44}}/>
+            <button onClick={()=>setShowPw(v=>!v)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:T.textSoft,cursor:"pointer",fontSize:16}}>{showPw?"🙈":"👁"}</button>
           </div>
-          <div style={{marginBottom:22}}>
-            <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:4}}>Lozinka</label>
-            <div style={{position:"relative"}}>
-              <input type={showPw?"text":"password"} value={password} onChange={e=>{setPassword(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&handleLogin()} style={{...inp,paddingRight:42}}/>
-              <button onClick={()=>setShowPw(v=>!v)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:T.textSoft,cursor:"pointer",fontSize:15}}>{showPw?"🙈":"👁"}</button>
-            </div>
-          </div>
-          <ErrBanner msg={error}/>
-          <button onClick={handleLogin} disabled={loading} style={{...btnS("primary"),width:"100%",padding:"12px",fontSize:14,opacity:loading?0.6:1}}>
-            {loading?"Prijavljivanje...":"Prijavi se →"}
-          </button>
-        </>}
-
-        {/* Step 2 — First-time 2FA setup */}
-        {step==="setup" && <>
-          <div style={{background:T.primaryLight,border:`1px solid ${T.primaryBorder}`,borderRadius:T.radiusSm,padding:"11px 14px",marginBottom:18,color:T.textMid,fontSize:13,lineHeight:1.6}}>
-            <strong style={{color:T.text}}>Korak 1:</strong> Instalirajte Google Authenticator ili Authy, pa skenirajte QR kod ispod.
-          </div>
-          {setupQr && (
-            <div style={{display:"flex",justifyContent:"center",marginBottom:14}}>
-              <div style={{background:"#fff",padding:12,borderRadius:T.radius,display:"inline-block"}}>
-                <img src={setupQr} alt="QR" style={{width:180,height:180,display:"block"}}/>
-              </div>
-            </div>
-          )}
-          {setupSecret && (
-            <div style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"8px 12px",marginBottom:18,textAlign:"center"}}>
-              <div style={{color:T.textSoft,fontSize:10,marginBottom:3}}>Ručni unos:</div>
-              <div style={{color:T.primary,fontFamily:"monospace",fontSize:12,letterSpacing:"0.1em",wordBreak:"break-all"}}>{setupSecret}</div>
-            </div>
-          )}
-          <div style={{color:T.textMid,fontSize:13,marginBottom:8,lineHeight:1.5}}>
-            <strong style={{color:T.text}}>Korak 2:</strong> Unesite 6-cifreni kod iz aplikacije.
-          </div>
-          <input type="text" inputMode="numeric" maxLength={6} value={setupCode}
-            onChange={e=>{setSetupCode(e.target.value.replace(/\D/g,""));setError("");}}
-            onKeyDown={e=>e.key==="Enter"&&setupCode.length===6&&handleSetupVerify()}
-            placeholder="123456"
-            style={{...inp,fontSize:22,letterSpacing:"0.3em",textAlign:"center",fontFamily:"monospace",marginBottom:16}}
-            autoFocus/>
-          <ErrBanner msg={error}/>
-          <button onClick={handleSetupVerify} disabled={loading||setupCode.length<6} style={{...btnS("primary"),width:"100%",padding:"12px",fontSize:14,opacity:(loading||setupCode.length<6)?0.6:1}}>
-            {loading?"Verifikacija...":"Potvrdi i prijavi se →"}
-          </button>
-        </>}
-
-        {/* Step 3 — Returning user TOTP */}
-        {step==="totp" && <>
-          <div style={{background:T.amberBg,border:`1px solid ${T.amberBorder}`,borderRadius:T.radiusSm,padding:"12px 14px",marginBottom:20,color:T.amber,fontSize:13,display:"flex",gap:10,alignItems:"flex-start"}}>
-            <span style={{fontSize:18}}>🔐</span>
-            <span>Otvorite vašu autentikator aplikaciju i unesite prikazani kod.</span>
-          </div>
-          <div style={{marginBottom:22}}>
-            <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:4}}>Kod (6 cifara)</label>
-            <input type="text" inputMode="numeric" maxLength={6} value={totpCode}
-              onChange={e=>{setTotpCode(e.target.value.replace(/\D/g,""));setError("");}}
-              onKeyDown={e=>e.key==="Enter"&&handleTotp()}
-              placeholder="123456"
-              style={{...inp,fontSize:22,letterSpacing:"0.3em",textAlign:"center",fontFamily:"monospace"}}
-              autoFocus/>
-          </div>
-          <ErrBanner msg={error}/>
-          <button onClick={handleTotp} disabled={loading||totpCode.length<6} style={{...btnS("primary"),width:"100%",padding:"12px",fontSize:14,opacity:(loading||totpCode.length<6)?0.6:1}}>
-            {loading?"Proveravanje...":"Potvrdi kod →"}
-          </button>
-          <button onClick={()=>{setStep("login");setTotpCode("");setError("");}} style={{...btnS("ghost"),width:"100%",padding:"10px",fontSize:13,marginTop:8}}>
-            ← Nazad na prijavu
-          </button>
-        </>}
+        </div>
+        <ErrBanner msg={error}/>
+        <button onClick={handleLogin} disabled={loading} style={{...btnS("primary"),width:"100%",padding:"13px",fontSize:14,opacity:loading?0.6:1}}>
+          {loading?"Prijavljivanje...":"Prijavi se →"}
+        </button>
       </div>
     </div>
-  );
-}
-
-// ── 2FA SETTINGS PANEL ────────────────────────────────────────────────────────
-function TwoFAPanel({onClose}) {
-  const [status,setStatus]   = useState("loading"); // loading | none | enrolled | setup
-  const [qr,setQr]           = useState("");
-  const [secret,setSecret]   = useState("");
-  const [factorId,setFactorId] = useState(null);
-  const [code,setCode]       = useState("");
-  const [error,setError]     = useState("");
-  const [saving,setSaving]   = useState(false);
-  const [success,setSuccess] = useState("");
-
-  useEffect(()=>{ checkStatus(); },[]);
-
-  async function checkStatus() {
-    const {data} = await sb.auth.mfa.listFactors();
-    const totp = data?.totp?.[0];
-    if (totp && totp.status==="verified") { setFactorId(totp.id); setStatus("enrolled"); }
-    else setStatus("none");
-  }
-
-  async function startSetup() {
-    setError(""); setSaving(true);
-    const {data,error:e} = await sb.auth.mfa.enroll({factorType:"totp"});
-    setSaving(false);
-    if (e) { setError(e.message); return; }
-    setFactorId(data.id);
-    setQr(data.totp.qr_code);
-    setSecret(data.totp.secret);
-    setStatus("setup");
-  }
-
-  async function verifySetup() {
-    setError(""); setSaving(true);
-    const {data:ch, error:ce} = await sb.auth.mfa.challenge({factorId});
-    if (ce) { setError(ce.message); setSaving(false); return; }
-    const {error:ve} = await sb.auth.mfa.verify({factorId, challengeId:ch.id, code:code.replace(/\s/g,"")});
-    setSaving(false);
-    if (ve) { setError("Neispravan kod — pokušajte ponovo."); return; }
-    setSuccess("2FA je uspešno aktiviran! ✓");
-    setStatus("enrolled");
-  }
-
-  async function unenroll() {
-    if (!window.confirm("Da li ste sigurni da želite da isključite 2FA?")) return;
-    setSaving(true);
-    const {error:e} = await sb.auth.mfa.unenroll({factorId});
-    setSaving(false);
-    if (e) { setError(e.message); return; }
-    setStatus("none"); setFactorId(null); setSuccess("2FA je isključen.");
-  }
-
-  const inp = {width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"10px 12px",color:T.text,fontSize:16,fontFamily:"monospace",boxSizing:"border-box",outline:"none",colorScheme:"dark",letterSpacing:"0.2em",textAlign:"center"};
-
-  return (
-    <Modal title="Dvofaktorska autentikacija (2FA)" onClose={onClose}>
-      <ErrBanner msg={error} onDismiss={()=>setError("")}/>
-      {success && <div style={{background:T.greenBg,border:`1px solid ${T.greenBorder}`,borderRadius:T.radiusSm,padding:"10px 14px",color:T.green,fontSize:13,marginBottom:16}}>{success}</div>}
-
-      {status==="loading" && <Spinner text="Provera statusa..."/>}
-
-      {status==="none" && (
-        <div style={{textAlign:"center",padding:"10px 0"}}>
-          <div style={{fontSize:40,marginBottom:12}}>🔓</div>
-          <div style={{color:T.text,fontSize:15,fontWeight:600,marginBottom:8,fontFamily:T.fontHead}}>2FA nije aktivan</div>
-          <div style={{color:T.textSoft,fontSize:13,marginBottom:24,lineHeight:1.6}}>Dodajte dodatni sloj zaštite. Koristite Google Authenticator, Authy ili drugu TOTP aplikaciju.</div>
-          <button onClick={startSetup} disabled={saving} style={{...btnS("primary"),padding:"11px 28px",fontSize:14}}>
-            {saving?"Generisanje...":"Aktiviraj 2FA"}
-          </button>
-        </div>
-      )}
-
-      {status==="setup" && (
-        <div>
-          <div style={{color:T.textMid,fontSize:13,marginBottom:16,lineHeight:1.6}}>
-            <strong style={{color:T.text}}>Korak 1:</strong> Skenirajte QR kod u vašoj autentikator aplikaciji.
-          </div>
-          {qr && (
-            <div style={{display:"flex",justifyContent:"center",marginBottom:16}}>
-              <div style={{background:"#fff",padding:12,borderRadius:T.radius}}>
-                <img src={qr} alt="QR kod" style={{width:180,height:180,display:"block"}}/>
-              </div>
-            </div>
-          )}
-          {secret && (
-            <div style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"10px 14px",marginBottom:16,textAlign:"center"}}>
-              <div style={{color:T.textSoft,fontSize:11,marginBottom:4}}>Ili unesite ručno:</div>
-              <div style={{color:T.primary,fontFamily:"monospace",fontSize:13,letterSpacing:"0.1em",wordBreak:"break-all"}}>{secret}</div>
-            </div>
-          )}
-          <div style={{color:T.textMid,fontSize:13,marginBottom:10,lineHeight:1.6}}>
-            <strong style={{color:T.text}}>Korak 2:</strong> Unesite 6-cifreni kod iz aplikacije.
-          </div>
-          <input type="text" inputMode="numeric" maxLength={6} value={code}
-            onChange={e=>setCode(e.target.value.replace(/\D/g,""))} placeholder="123456" style={inp} autoFocus/>
-          <div style={{display:"flex",gap:10,marginTop:18}}>
-            <button onClick={()=>setStatus("none")} style={btnS("ghost")}>Otkaži</button>
-            <button onClick={verifySetup} disabled={saving||code.length<6} style={{...btnS("primary"),flex:1,opacity:(saving||code.length<6)?0.6:1}}>
-              {saving?"Verifikacija...":"Potvrdi i aktiviraj"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {status==="enrolled" && (
-        <div style={{textAlign:"center",padding:"10px 0"}}>
-          <div style={{fontSize:40,marginBottom:12}}>🔐</div>
-          <div style={{color:T.green,fontSize:15,fontWeight:600,marginBottom:8,fontFamily:T.fontHead}}>2FA je aktivan</div>
-          <div style={{color:T.textSoft,fontSize:13,marginBottom:24,lineHeight:1.6}}>Vaš nalog je zaštićen dvofaktorskom autentikacijom.</div>
-          <button onClick={unenroll} disabled={saving} style={{...btnS("danger"),padding:"9px 22px"}}>
-            {saving?"Isključivanje...":"Isključi 2FA"}
-          </button>
-        </div>
-      )}
-    </Modal>
   );
 }
 
@@ -1032,8 +676,6 @@ export default function App() {
   const [users,setUsers]             = useState([]);
   const [loading,setLoading]         = useState(false);
   const [globalErr,setGlobalErr]     = useState("");
-  const [show2FA,setShow2FA]         = useState(false);
-  const [navOpen,setNavOpen]         = useState(false);
 
   const [editingPosao,setEditingPosao] = useState(null);
   const [viewingPosao,setViewingPosao] = useState(null);
@@ -1047,7 +689,6 @@ export default function App() {
   const [confirmDelete,setConfirmDelete] = useState(null);
   const [saving,setSaving] = useState(false);
 
-  const {isMobile, isTablet} = useBreakpoint();
 
   useEffect(()=>{
     sb.auth.getSession().then(({data:{session}})=>{
@@ -1216,19 +857,19 @@ export default function App() {
   );
 
   const PosaoForm = () => (
-    <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:"0 20px"}}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}>
       <Field label="Posao (automatski)" value={tempData.Posao} onChange={()=>{}} readOnly/>
       <DateField label="Datum unosa" value={tempData.DatumUnosa} onChange={tf("DatumUnosa")} readOnly={!!newPosao}/>
       <KupacSearchField label="Klijent" sifra={tempData.SifraKupca} naziv={tempData.KLIJENT} kupci={kupci} onChange={k=>setTempData(d=>({...d,SifraKupca:k.SifraKupca,KLIJENT:k.Naziv}))}/>
       <DateField label="Rok za isporuku" value={tempData.RokZaIsporuku} onChange={tf("RokZaIsporuku")}/>
       <UserSearchField label="Unosilac posla" value={tempData.Unosilac} onChange={tf("Unosilac")} users={users}/>
-      <div style={{gridColumn:isMobile?"1":"1/-1"}}><Field label="Opis" value={tempData.Opis} onChange={tf("Opis")}/></div>
-      <div style={{gridColumn:isMobile?"1":"1/-1"}}><Field label="Specifikacija cene" value={tempData.SpecifikacijaCene} onChange={tf("SpecifikacijaCene")}/></div>
+      <div style={{gridColumn:"1/-1"}}><Field label="Opis" value={tempData.Opis} onChange={tf("Opis")}/></div>
+      <div style={{gridColumn:"1/-1"}}><Field label="Specifikacija cene" value={tempData.SpecifikacijaCene} onChange={tf("SpecifikacijaCene")}/></div>
       <Field label="Obračun (RSD)" value={tempData.Obracun} onChange={tf("Obracun")} type="number"/>
       <Field label="Poslati na izradu" value={tempData.PoslatiNaIzradu} onChange={tf("PoslatiNaIzradu")} options={izradaOptions.map(o=>o.naziv)}/>
       <RadioGroup label="Montaža / Isporuka" value={tempData.MontazaIsporuka} onChange={tf("MontazaIsporuka")} options={montazaIsporukaOptions}/>
       <RadioGroup label="Plaćanje" value={tempData.Placanje} onChange={tf("Placanje")} options={placanjeOptions}/>
-      <div style={{gridColumn:isMobile?"1":"1/-1",display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(5,1fr)",gap:"0 16px",marginTop:4}}>
+      <div style={{gridColumn:"1/-1",display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"0 16px",marginTop:4}}>
         <CheckField label="Završen posao" value={tempData.ZavrsenPosao} onChange={tf("ZavrsenPosao")}/>
         {[["Status izrade",tempData.StatusIzrade,"Radionica"],["Status isporuke",tempData.StatusIsporuke,"Isporuka"],["Status montaže",tempData.StatusMontaze,"Montaža"],["Fakturisano",tempData.Fakturisano,"Knjiženje"]].map(([lbl,val,vn])=>(
           <div key={lbl} style={{marginBottom:14}}>
@@ -1259,71 +900,39 @@ export default function App() {
 
       {/* NAVBAR */}
       <div style={{background:T.surface,borderBottom:`1px solid ${T.border}`,position:"sticky",top:0,zIndex:100}}>
-        <div style={{maxWidth:1700,margin:"0 auto",padding:"0 16px",display:"flex",alignItems:"center",height:54,gap:12}}>
-          {/* Logo */}
-          <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+        <div style={{maxWidth:1700,margin:"0 auto",padding:"0 20px",display:"flex",alignItems:"center",height:52,gap:16}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginRight:8}}>
             <div style={{width:26,height:26,background:T.primary,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center"}}>
               <div style={{width:9,height:9,background:"#fff",borderRadius:2,transform:"rotate(45deg)"}}/>
             </div>
-            {!isMobile && <span style={{fontFamily:T.fontHead,fontSize:15,fontWeight:700,color:T.text,letterSpacing:"-0.02em"}}>Poslovi</span>}
+            <span style={{fontFamily:T.fontHead,fontSize:15,fontWeight:700,color:T.text,letterSpacing:"-0.02em"}}>Poslovi</span>
           </div>
-
-          {/* Desktop nav */}
-          {!isMobile && (
-            <nav style={{display:"flex",gap:1,flex:1,overflowX:"auto"}}>
-              {visibleTabs.map(t=>(
-                <button key={t.key} onClick={()=>setView(t.key)} style={{
-                  background:view===t.key?T.primaryLight:"none",border:"none",
-                  color:view===t.key?T.primary:T.textSoft,borderRadius:T.radiusSm,
-                  padding:"5px 10px",cursor:"pointer",fontSize:12,fontWeight:view===t.key?600:400,
-                  transition:"all 0.15s",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap",fontFamily:T.fontBody,
-                }}>
-                  <span>{t.icon}</span>{!isTablet && t.label}
-                </button>
-              ))}
-            </nav>
-          )}
-
-          {isMobile && <div style={{flex:1}}/>}
-
-          {/* User + 2FA + Logout */}
-          <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-            {!isMobile && (
-              <>
-                <div style={{width:28,height:28,borderRadius:"50%",background:T.primaryLight,border:`2px solid ${T.primaryBorder}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:T.primary}}>
-                  {(profile.ime||"?")[0]}{(profile.prezime||"")[0]}
-                </div>
-                <div style={{lineHeight:1.3}}>
-                  <div style={{fontSize:11,fontWeight:600,color:T.text}}>{profile.ime} {profile.prezime}</div>
-                  <div style={{fontSize:10,color:T.textSoft}}>{profile.is_admin?"Admin":"Korisnik"}</div>
-                </div>
-              </>
-            )}
-            <button onClick={()=>setShow2FA(true)} title="2FA podešavanja" style={{...btnS("ghost"),padding:"5px 9px",fontSize:12}}>🔐</button>
-            <button onClick={handleLogout} style={{...btnS("ghost"),padding:"5px 9px",fontSize:11}}>↩</button>
-            {isMobile && (
-              <button onClick={()=>setNavOpen(v=>!v)} style={{...btnS("ghost"),padding:"5px 10px",fontSize:16}}>☰</button>
-            )}
-          </div>
-        </div>
-
-        {/* Mobile dropdown nav */}
-        {isMobile && navOpen && (
-          <div style={{background:T.surface,borderTop:`1px solid ${T.border}`,padding:"8px 0",maxHeight:"60vh",overflowY:"auto"}}>
+          <nav style={{display:"flex",gap:1,flex:1,overflowX:"auto"}}>
             {visibleTabs.map(t=>(
-              <button key={t.key} onClick={()=>{setView(t.key);setNavOpen(false);}} style={{
-                display:"flex",alignItems:"center",gap:10,width:"100%",background:view===t.key?T.primaryLight:"none",
-                border:"none",color:view===t.key?T.primary:T.textMid,padding:"12px 20px",
-                cursor:"pointer",fontSize:14,fontWeight:view===t.key?600:400,fontFamily:T.fontBody,textAlign:"left",
+              <button key={t.key} onClick={()=>setView(t.key)} style={{
+                background:view===t.key?T.primaryLight:"none",border:"none",
+                color:view===t.key?T.primary:T.textSoft,borderRadius:T.radiusSm,
+                padding:"5px 12px",cursor:"pointer",fontSize:12,fontWeight:view===t.key?600:400,
+                transition:"all 0.15s",display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap",fontFamily:T.fontBody,
               }}>
-                <span style={{fontSize:16}}>{t.icon}</span>{t.label}
+                <span>{t.icon}</span>{t.label}
               </button>
             ))}
+          </nav>
+          <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+            <div style={{width:28,height:28,borderRadius:"50%",background:T.primaryLight,border:`2px solid ${T.primaryBorder}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:T.primary}}>
+              {(profile.ime||"?")[0]}{(profile.prezime||"")[0]}
+            </div>
+            <div style={{lineHeight:1.3}}>
+              <div style={{fontSize:11,fontWeight:600,color:T.text}}>{profile.ime} {profile.prezime}</div>
+              <div style={{fontSize:10,color:T.textSoft}}>{profile.is_admin?"Admin":"Korisnik"}</div>
+            </div>
+            <button onClick={handleLogout} style={{...btnS("ghost"),padding:"5px 14px",fontSize:12}}>Odjava</button>
           </div>
-        )}
+        </div>
       </div>
 
-      <div style={{maxWidth:1700,margin:"0 auto",padding:isMobile?"14px 12px":"22px 20px"}}>
+      <div style={{maxWidth:1700,margin:"0 auto",padding:"22px 20px"}}>
         <ErrBanner msg={globalErr} onDismiss={()=>setGlobalErr("")}/>
         {loading && <Spinner/>}
 
@@ -1473,7 +1082,7 @@ export default function App() {
 
       {viewingPosao && (
         <Modal title={`Posao ${viewingPosao.Posao}`} onClose={closeModal} wide>
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:"0 36px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 36px"}}>
             {df("Broj posla",viewingPosao.Posao,T.primary)}{df("Datum unosa",fmtDate(viewingPosao.DatumUnosa))}
             {df("Klijent",viewingPosao.KLIJENT)}{df("Šifra kupca",viewingPosao.SifraKupca)}
             {df("Rok za isporuku",fmtDate(viewingPosao.RokZaIsporuku))}{df("Unosilac",viewingPosao.Unosilac)}
@@ -1500,7 +1109,7 @@ export default function App() {
 
       {(editingKupac||newKupac) && (
         <Modal title={newKupac?"Novi kupac":`Uredi: ${tempData.Naziv}`} onClose={closeModal}>
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:"0 20px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}>
             <Field label="Šifra kupca (auto)" value={tempData.SifraKupca} onChange={tf("SifraKupca")} readOnly={newKupac}/>
             <Field label="Naziv" value={tempData.Naziv} onChange={tf("Naziv")}/>
             <Field label="Grad" value={tempData.Grad} onChange={tf("Grad")}/>
@@ -1519,7 +1128,7 @@ export default function App() {
 
       {viewingKupac && (
         <Modal title={viewingKupac.Naziv} onClose={closeModal}>
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:"0 36px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 36px"}}>
             {df("Šifra kupca",viewingKupac.SifraKupca,T.primary)}{df("Naziv",viewingKupac.Naziv)}
             {df("Grad",viewingKupac.Grad)}{df("Ulica i broj",`${viewingKupac.Ulica||""} ${viewingKupac.Broj||""}`.trim())}
             {df("Poštanski broj",viewingKupac.PostanskiBroj)}{df("Telefon",viewingKupac.Telefon)}
@@ -1544,11 +1153,11 @@ export default function App() {
 
       {editingUser && (
         <Modal title={`Dozvole: ${tempData.ime} ${tempData.prezime}`} onClose={closeModal} wide>
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:"0 22px",marginBottom:16}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 22px",marginBottom:16}}>
             <Field label="Ime" value={tempData.ime} onChange={tf("ime")} error={tempErrors.ime}/>
             <Field label="Prezime" value={tempData.prezime} onChange={tf("prezime")} error={tempErrors.prezime}/>
             <Field label="Telefon" value={tempData.telefon} onChange={tf("telefon")}/>
-            <div style={{gridColumn:isMobile?"1":"1/-1"}}><Field label="Adresa" value={tempData.adresa} onChange={tf("adresa")}/></div>
+            <div style={{gridColumn:"1/-1"}}><Field label="Adresa" value={tempData.adresa} onChange={tf("adresa")}/></div>
           </div>
           <div style={{color:T.text,fontSize:13,fontWeight:600,marginBottom:10,fontFamily:T.fontHead}}>Dozvole po karticama</div>
           <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`}}>
@@ -1597,7 +1206,6 @@ export default function App() {
         </div>
       )}
 
-      {show2FA && <TwoFAPanel onClose={()=>setShow2FA(false)}/>}
     </div>
   );
 }
