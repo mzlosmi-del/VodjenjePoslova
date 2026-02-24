@@ -728,26 +728,28 @@ function KupciView({kupci, canEdit, onNew, onEdit, onDelete, onView}) {
 
 // ── LOGIN + 2FA ───────────────────────────────────────────────────────────────
 function LoginScreen({onLogin}) {
-  const [step,setStep]       = useState("login"); // "login" | "totp"
-  const [email,setEmail]     = useState("");
+  const [step,setStep]         = useState("login"); // "login" | "setup" | "totp"
+  const [email,setEmail]       = useState("");
   const [password,setPassword] = useState("");
   const [totpCode,setTotpCode] = useState("");
-  const [error,setError]     = useState("");
-  const [showPw,setShowPw]   = useState(false);
-  const [loading,setLoading] = useState(false);
-  const [mfaSession,setMfaSession] = useState(null); // stores factorId for verify step
+  const [setupCode,setSetupCode] = useState("");
+  const [setupQr,setSetupQr]   = useState("");
+  const [setupSecret,setSetupSecret] = useState("");
+  const [error,setError]       = useState("");
+  const [showPw,setShowPw]     = useState(false);
+  const [loading,setLoading]   = useState(false);
+  const [mfaSession,setMfaSession] = useState(null);
 
   async function handleLogin() {
     setLoading(true); setError("");
-    const {data,error:e} = await sb.auth.signInWithPassword({email,password});
+    const {data, error:e} = await sb.auth.signInWithPassword({email, password});
     if (e) { setError(e.message); setLoading(false); return; }
 
-    // Check if user has MFA enrolled
+    // Check AAL — if nextLevel is aal2 and current is aal1, user has verified 2FA
     const {data: aal} = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (aal?.nextLevel === "aal2" && aal.nextLevel !== aal.currentLevel) {
-      // MFA required — get the factor to challenge
+    if (aal?.nextLevel === "aal2" && aal.currentLevel === "aal1") {
       const {data: factors} = await sb.auth.mfa.listFactors();
-      const totp = factors?.totp?.[0];
+      const totp = factors?.totp?.find(f => f.status === "verified");
       if (totp) {
         const {data: challenge, error: ce} = await sb.auth.mfa.challenge({factorId: totp.id});
         if (ce) { setError(ce.message); setLoading(false); return; }
@@ -757,7 +759,35 @@ function LoginScreen({onLogin}) {
         return;
       }
     }
-    onLogin(data.user);
+
+    // No verified 2FA — enroll now
+    const {data: factors2} = await sb.auth.mfa.listFactors();
+    const pending = factors2?.totp?.find(f => f.status !== "verified");
+    if (pending) await sb.auth.mfa.unenroll({factorId: pending.id});
+    const {data: enroll, error: ee} = await sb.auth.mfa.enroll({factorType: "totp"});
+    if (ee) { setError(ee.message); setLoading(false); return; }
+    setMfaSession({factorId: enroll.id});
+    setSetupQr(enroll.totp.qr_code);
+    setSetupSecret(enroll.totp.secret);
+    setSetupCode("");
+    setStep("setup");
+    setLoading(false);
+  }
+
+  async function handleSetupVerify() {
+    setLoading(true); setError("");
+    const {data: ch, error: ce} = await sb.auth.mfa.challenge({factorId: mfaSession.factorId});
+    if (ce) { setError(ce.message); setLoading(false); return; }
+    const {error: ve} = await sb.auth.mfa.verify({
+      factorId: mfaSession.factorId,
+      challengeId: ch.id,
+      code: setupCode.replace(/\s/g,""),
+    });
+    setLoading(false);
+    if (ve) { setError("Neispravan kod — pokušajte ponovo."); return; }
+    // Enrollment verified — now get session and log in
+    const {data: {session}} = await sb.auth.getSession();
+    onLogin(session.user);
   }
 
   async function handleTotp() {
@@ -772,25 +802,24 @@ function LoginScreen({onLogin}) {
   }
 
   const inp = {width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"11px 14px",color:T.text,fontSize:14,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"dark"};
+  const stepTitles = {login:"Dobrodošli nazad", setup:"Podesite dvofaktorsku zaštitu", totp:"Dvofaktorska autentikacija"};
+  const stepSubs   = {login:"Prijavite se na svoj nalog", setup:"Skenirajte QR kod i potvrdite", totp:"Unesite 6-cifreni kod iz aplikacije"};
 
   return (
     <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0D1117 0%,#111827 50%,#0F172A 100%)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:T.fontBody,padding:"16px"}}>
       <div style={{position:"fixed",top:-120,right:-120,width:400,height:400,background:"radial-gradient(circle,rgba(59,130,246,0.18) 0%,transparent 70%)",borderRadius:"50%",pointerEvents:"none"}}/>
       <div style={{position:"fixed",bottom:-80,left:-80,width:300,height:300,background:"radial-gradient(circle,rgba(167,139,250,0.14) 0%,transparent 70%)",borderRadius:"50%",pointerEvents:"none"}}/>
-      <div style={{background:T.surface,borderRadius:T.radiusLg,padding:"36px 32px",width:"100%",maxWidth:400,boxShadow:T.shadowLg,border:`1px solid ${T.border}`,position:"relative"}}>
-        <div style={{marginBottom:28}}>
+      <div style={{background:T.surface,borderRadius:T.radiusLg,padding:"36px 32px",width:"100%",maxWidth:420,boxShadow:T.shadowLg,border:`1px solid ${T.border}`,position:"relative"}}>
+        <div style={{marginBottom:24}}>
           <div style={{display:"inline-flex",alignItems:"center",gap:8,background:T.primaryLight,border:`1px solid ${T.primaryBorder}`,borderRadius:T.radius,padding:"6px 12px",marginBottom:16}}>
             <div style={{width:7,height:7,background:T.primary,borderRadius:"50%"}}/>
             <span style={{color:T.primary,fontSize:11,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase"}}>Poslovi App</span>
           </div>
-          <h1 style={{fontFamily:T.fontHead,fontSize:24,fontWeight:800,color:T.text,margin:"0 0 5px",letterSpacing:"-0.04em"}}>
-            {step==="totp" ? "Dvofaktorska autentikacija" : "Dobrodošli nazad"}
-          </h1>
-          <p style={{color:T.textSoft,fontSize:13,margin:0}}>
-            {step==="totp" ? "Unesite 6-cifreni kod iz aplikacije" : "Prijavite se na svoj nalog"}
-          </p>
+          <h1 style={{fontFamily:T.fontHead,fontSize:24,fontWeight:800,color:T.text,margin:"0 0 5px",letterSpacing:"-0.04em"}}>{stepTitles[step]}</h1>
+          <p style={{color:T.textSoft,fontSize:13,margin:0}}>{stepSubs[step]}</p>
         </div>
 
+        {/* Step 1 — Email + Password */}
         {step==="login" && <>
           <div style={{marginBottom:14}}>
             <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:4}}>Email adresa</label>
@@ -809,10 +838,44 @@ function LoginScreen({onLogin}) {
           </button>
         </>}
 
+        {/* Step 2 — First-time 2FA setup */}
+        {step==="setup" && <>
+          <div style={{background:T.primaryLight,border:`1px solid ${T.primaryBorder}`,borderRadius:T.radiusSm,padding:"11px 14px",marginBottom:18,color:T.textMid,fontSize:13,lineHeight:1.6}}>
+            <strong style={{color:T.text}}>Korak 1:</strong> Instalirajte Google Authenticator ili Authy, pa skenirajte QR kod ispod.
+          </div>
+          {setupQr && (
+            <div style={{display:"flex",justifyContent:"center",marginBottom:14}}>
+              <div style={{background:"#fff",padding:12,borderRadius:T.radius,display:"inline-block"}}>
+                <img src={setupQr} alt="QR" style={{width:180,height:180,display:"block"}}/>
+              </div>
+            </div>
+          )}
+          {setupSecret && (
+            <div style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"8px 12px",marginBottom:18,textAlign:"center"}}>
+              <div style={{color:T.textSoft,fontSize:10,marginBottom:3}}>Ručni unos:</div>
+              <div style={{color:T.primary,fontFamily:"monospace",fontSize:12,letterSpacing:"0.1em",wordBreak:"break-all"}}>{setupSecret}</div>
+            </div>
+          )}
+          <div style={{color:T.textMid,fontSize:13,marginBottom:8,lineHeight:1.5}}>
+            <strong style={{color:T.text}}>Korak 2:</strong> Unesite 6-cifreni kod iz aplikacije.
+          </div>
+          <input type="text" inputMode="numeric" maxLength={6} value={setupCode}
+            onChange={e=>{setSetupCode(e.target.value.replace(/\D/g,""));setError("");}}
+            onKeyDown={e=>e.key==="Enter"&&setupCode.length===6&&handleSetupVerify()}
+            placeholder="123456"
+            style={{...inp,fontSize:22,letterSpacing:"0.3em",textAlign:"center",fontFamily:"monospace",marginBottom:16}}
+            autoFocus/>
+          <ErrBanner msg={error}/>
+          <button onClick={handleSetupVerify} disabled={loading||setupCode.length<6} style={{...btnS("primary"),width:"100%",padding:"12px",fontSize:14,opacity:(loading||setupCode.length<6)?0.6:1}}>
+            {loading?"Verifikacija...":"Potvrdi i prijavi se →"}
+          </button>
+        </>}
+
+        {/* Step 3 — Returning user TOTP */}
         {step==="totp" && <>
           <div style={{background:T.amberBg,border:`1px solid ${T.amberBorder}`,borderRadius:T.radiusSm,padding:"12px 14px",marginBottom:20,color:T.amber,fontSize:13,display:"flex",gap:10,alignItems:"flex-start"}}>
             <span style={{fontSize:18}}>🔐</span>
-            <span>Otvorite vašu autentikator aplikaciju (Google Authenticator, Authy...) i unesite prikazani kod.</span>
+            <span>Otvorite vašu autentikator aplikaciju i unesite prikazani kod.</span>
           </div>
           <div style={{marginBottom:22}}>
             <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:4}}>Kod (6 cifara)</label>
