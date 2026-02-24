@@ -755,8 +755,10 @@ function LoginScreen({onLogin}) {
 
     if (verifiedTotp) {
       // User has verified 2FA — challenge them
+      console.log("Challenging factor:", verifiedTotp.id);
       const {data: challenge, error: ce} = await sb.auth.mfa.challenge({factorId: verifiedTotp.id});
-      if (ce) { setError(ce.message); setLoading(false); return; }
+      console.log("Challenge result:", JSON.stringify(challenge), "Error:", JSON.stringify(ce));
+      if (ce) { setError("Challenge error: " + ce.message); setLoading(false); return; }
       setMfaSession({factorId: verifiedTotp.id, challengeId: challenge.id});
       setStep("totp");
       setLoading(false);
