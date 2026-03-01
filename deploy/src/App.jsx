@@ -329,20 +329,68 @@ function PageHeader({title,subtitle,action}) {
   );
 }
 
-// ── TABLE CONTROLS (search / sort / column reorder) ───────────────────────────
-function useTableControls(viewKey, defaultCols) {
-  const storageKey = `cols_${viewKey}`;
+// ── TABLE CONTROLS (search / sort / column reorder + saved layouts) ──────────
+function useTableControls(viewKey, defaultCols, currentUser, canPublishLayouts) {
   const [search,  setSearch]  = useState("");
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
   const [showColMenu, setShowColMenu] = useState(false);
-  const [cols, setCols] = useState(() => {
-    try { const s = localStorage.getItem(storageKey); return s ? JSON.parse(s) : defaultCols; }
-    catch { return defaultCols; }
-  });
+  const [cols, setCols] = useState(defaultCols);
+  const [layouts, setLayouts] = useState([]);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [layoutName, setLayoutName] = useState("");
+  const [saveAsShared, setSaveAsShared] = useState(false);
+  const [layoutsLoaded, setLayoutsLoaded] = useState(false);
   const dragCol = useRef(null);
 
-  function saveCols(next) { setCols(next); try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch {} }
+  // Load layouts and apply shared default on mount
+  useEffect(() => {
+    if (!currentUser) return;
+    (async () => {
+      const { data } = await sb.from("column_layouts")
+        .select("*")
+        .eq("view_key", viewKey)
+        .order("created_at", { ascending: true });
+      if (data) {
+        setLayouts(data);
+        // If user has their own saved layout, prefer it
+        const mine = data.find(l => l.user_id === currentUser.id && !l.is_shared);
+        const shared = data.find(l => l.is_shared);
+        const toApply = mine || shared;
+        if (toApply) setCols(toApply.cols);
+      }
+      setLayoutsLoaded(true);
+    })();
+  }, [currentUser, viewKey]);
+
+  function saveCols(next) { setCols(next); }
+
+  async function saveLayout() {
+    if (!layoutName.trim() || !currentUser) return;
+    const payload = { user_id: currentUser.id, view_key: viewKey, name: layoutName.trim(), cols, is_shared: saveAsShared && canPublishLayouts };
+    // Upsert: if user already has a layout with same name+view, update it
+    const existing = layouts.find(l => l.user_id === currentUser.id && l.name === layoutName.trim() && l.view_key === viewKey);
+    let result;
+    if (existing) {
+      result = await sb.from("column_layouts").update({ cols, is_shared: payload.is_shared, updated_at: new Date().toISOString() }).eq("id", existing.id).select().single();
+    } else {
+      result = await sb.from("column_layouts").insert([payload]).select().single();
+    }
+    if (result.data) {
+      setLayouts(prev => existing ? prev.map(l => l.id===existing.id ? result.data : l) : [...prev, result.data]);
+    }
+    setShowSaveDialog(false); setLayoutName("");
+  }
+
+  async function deleteLayout(id) {
+    await sb.from("column_layouts").delete().eq("id", id);
+    setLayouts(prev => prev.filter(l => l.id !== id));
+  }
+
+  async function applyLayout(layout) {
+    setCols(layout.cols);
+  }
+
   function toggleSort(key) {
     if (sortCol===key) setSortDir(d=>d==="asc"?"desc":"asc");
     else { setSortCol(key); setSortDir("asc"); }
@@ -381,6 +429,9 @@ function useTableControls(viewKey, defaultCols) {
     return <span style={{color:T.primary,fontSize:10,marginLeft:4}}>{sortDir==="asc"?"↑":"↓"}</span>;
   };
 
+  const myLayouts    = layouts.filter(l => l.user_id === currentUser?.id);
+  const sharedLayouts = layouts.filter(l => l.is_shared);
+
   const Toolbar = ({extraAction}) => {
     const [localSearch, setLocalSearch] = useState(search);
     const commit = (val) => setSearch(val);
@@ -400,25 +451,84 @@ function useTableControls(viewKey, defaultCols) {
             ⚙ Kolone
           </button>
           {showColMenu&&(
-            <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,zIndex:500,boxShadow:T.shadowMd,minWidth:220,padding:12}}>
-              <div style={{color:T.textSoft,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Redosled kolona</div>
-              <div style={{color:T.textSoft,fontSize:11,marginBottom:8}}>Prevuci da promeniš redosled</div>
-              {cols.map(c=>(
-                <div key={c.key} draggable onDragStart={()=>onDragStart(c.key)} onDragOver={e=>e.preventDefault()} onDrop={()=>onDrop(c.key)}
-                  style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:T.radiusSm,cursor:"grab",marginBottom:3,background:T.surfaceRaised,border:`1px solid ${T.border}`}}>
-                  <span style={{color:T.textSoft,fontSize:12}}>⠿</span>
-                  <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",flex:1,fontSize:13,color:T.text,fontFamily:T.fontBody}}>
-                    <input type="checkbox" checked={c.visible} onChange={()=>saveCols(cols.map(x=>x.key===c.key?{...x,visible:!x.visible}:x))} style={{accentColor:T.primary}}/>
-                    {c.label}
-                  </label>
+            <div style={{position:"fixed",top:"auto",right:0,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,zIndex:500,boxShadow:T.shadowMd,width:280,padding:14}} onClick={e=>e.stopPropagation()}>
+
+              {/* Saved layouts section */}
+              {(myLayouts.length > 0 || sharedLayouts.length > 0) && (
+                <div style={{marginBottom:12}}>
+                  <div style={{color:T.textSoft,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Sačuvani rasporedi</div>
+                  {sharedLayouts.map(l=>(
+                    <div key={l.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                      <button onClick={()=>applyLayout(l)} style={{flex:1,textAlign:"left",background:T.primaryLight,border:`1px solid ${T.primaryBorder}`,color:T.primary,borderRadius:T.radiusSm,padding:"5px 9px",cursor:"pointer",fontSize:12,fontFamily:T.fontBody,fontWeight:600}}>
+                        🌐 {l.name}
+                      </button>
+                      {l.user_id === currentUser?.id && (
+                        <button onClick={()=>deleteLayout(l.id)} style={{background:"none",border:`1px solid ${T.redBorder}`,color:T.red,borderRadius:T.radiusSm,padding:"4px 7px",cursor:"pointer",fontSize:11}}>✕</button>
+                      )}
+                    </div>
+                  ))}
+                  {myLayouts.filter(l=>!l.is_shared).map(l=>(
+                    <div key={l.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                      <button onClick={()=>applyLayout(l)} style={{flex:1,textAlign:"left",background:T.surfaceRaised,border:`1px solid ${T.border}`,color:T.text,borderRadius:T.radiusSm,padding:"5px 9px",cursor:"pointer",fontSize:12,fontFamily:T.fontBody}}>
+                        👤 {l.name}
+                      </button>
+                      <button onClick={()=>deleteLayout(l.id)} style={{background:"none",border:`1px solid ${T.redBorder}`,color:T.red,borderRadius:T.radiusSm,padding:"4px 7px",cursor:"pointer",fontSize:11}}>✕</button>
+                    </div>
+                  ))}
+                  <div style={{borderTop:`1px solid ${T.border}`,marginTop:8,marginBottom:8}}/>
                 </div>
-              ))}
-              <button onClick={()=>saveCols(defaultCols)} style={{...btnS("ghost"),width:"100%",marginTop:8,padding:"5px",fontSize:11}}>Resetuj</button>
-              <button onClick={()=>setShowColMenu(false)} style={{...btnS("primary"),width:"100%",marginTop:6,padding:"5px",fontSize:11}}>Zatvori</button>
+              )}
+
+              {/* Column order/visibility */}
+              <div style={{color:T.textSoft,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Redosled kolona</div>
+              <div style={{color:T.textSoft,fontSize:11,marginBottom:8}}>Prevuci da promeniš redosled</div>
+              <div style={{maxHeight:260,overflowY:"auto",marginBottom:8}}>
+                {cols.map(c=>(
+                  <div key={c.key} draggable onDragStart={()=>onDragStart(c.key)} onDragOver={e=>e.preventDefault()} onDrop={()=>onDrop(c.key)}
+                    style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",borderRadius:T.radiusSm,cursor:"grab",marginBottom:3,background:T.surfaceRaised,border:`1px solid ${T.border}`}}>
+                    <span style={{color:T.textSoft,fontSize:12}}>⠿</span>
+                    <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",flex:1,fontSize:13,color:T.text,fontFamily:T.fontBody}}>
+                      <input type="checkbox" checked={c.visible} onChange={()=>saveCols(cols.map(x=>x.key===c.key?{...x,visible:!x.visible}:x))} style={{accentColor:T.primary}}/>
+                      {c.label}
+                    </label>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:6,marginBottom:8}}>
+                <button onClick={()=>saveCols(defaultCols)} style={{...btnS("ghost"),flex:1,padding:"5px",fontSize:11}}>Resetuj</button>
+                <button onClick={()=>{setShowSaveDialog(true);setShowColMenu(false);}} style={{...btnS("primary"),flex:1,padding:"5px",fontSize:11}}>Sačuvaj raspored</button>
+              </div>
+              <button onClick={()=>setShowColMenu(false)} style={{...btnS("ghost"),width:"100%",padding:"5px",fontSize:11}}>Zatvori</button>
             </div>
           )}
         </div>
         {extraAction}
+
+        {/* Save layout dialog */}
+        {showSaveDialog && (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,backdropFilter:"blur(4px)"}}>
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radiusLg,padding:"24px 28px",width:360,boxShadow:T.shadowLg}}>
+              <h3 style={{color:T.text,fontFamily:T.fontHead,margin:"0 0 16px",fontSize:17,fontWeight:700}}>Sačuvaj raspored kolona</h3>
+              <div style={{marginBottom:12}}>
+                <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:4}}>Naziv rasporeda</label>
+                <input value={layoutName} onChange={e=>setLayoutName(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&saveLayout()}
+                  placeholder="npr. Moj pregled" autoFocus
+                  style={{width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"dark"}}/>
+              </div>
+              {canPublishLayouts && (
+                <label style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,cursor:"pointer"}}>
+                  <input type="checkbox" checked={saveAsShared} onChange={e=>setSaveAsShared(e.target.checked)} style={{accentColor:T.primary,width:15,height:15}}/>
+                  <span style={{color:T.textMid,fontSize:13}}>🌐 Objavi kao zajednički raspored (vidljiv svima)</span>
+                </label>
+              )}
+              <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                <button onClick={()=>{setShowSaveDialog(false);setLayoutName("");}} style={btnS("ghost")}>Otkaži</button>
+                <button onClick={saveLayout} disabled={!layoutName.trim()} style={{...btnS("primary"),opacity:!layoutName.trim()?0.5:1}}>Sačuvaj</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -448,8 +558,8 @@ const POSAO_COLS_DEFAULT = [
   {key:"Fakturisano",visible:false,label:"Fakturisano"},
 ];
 
-function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZavrsen}) {
-  const ctrl = useTableControls(viewKey, POSAO_COLS_DEFAULT);
+function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZavrsen, currentUser, canPublishLayouts}) {
+  const ctrl = useTableControls(viewKey, POSAO_COLS_DEFAULT, currentUser, canPublishLayouts);
   const visibleCols = ctrl.cols.filter(c=>c.visible);
   const processed = ctrl.filterAndSort(rows);
   const miColor = v => v==="Montaža i isporuka"?T.primary:v==="Samo isporuka"?T.green:T.purple;
@@ -522,8 +632,8 @@ function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZ
   );
 }
 
-function SimpleTable({rows, viewKey, columns, renderCell, emptyMsg="Nema zapisa"}) {
-  const ctrl = useTableControls(viewKey, columns.map(c=>({key:c.key,label:c.label,visible:true})));
+function SimpleTable({rows, viewKey, columns, renderCell, emptyMsg="Nema zapisa", currentUser, canPublishLayouts}) {
+  const ctrl = useTableControls(viewKey, columns.map(c=>({key:c.key,label:c.label,visible:true})), currentUser, canPublishLayouts);
   const visibleCols = ctrl.cols.filter(c=>c.visible);
   const processed = ctrl.filterAndSort(rows);
 
@@ -566,8 +676,8 @@ const KUPCI_COLS_DEFAULT = [
   {key:"Telefon",label:"Telefon",visible:true},{key:"PIB",label:"PIB",visible:true},
 ];
 
-function KupciView({kupci, canEdit, onNew, onEdit, onDelete, onView}) {
-  const ctrl = useTableControls("kupci", KUPCI_COLS_DEFAULT);
+function KupciView({kupci, canEdit, onNew, onEdit, onDelete, onView, currentUser, canPublishLayouts}) {
+  const ctrl = useTableControls("kupci", KUPCI_COLS_DEFAULT, currentUser, canPublishLayouts);
   const visibleCols = ctrl.cols.filter(c=>c.visible);
   const processed = ctrl.filterAndSort(kupci);
   return (
@@ -664,6 +774,144 @@ function LoginScreen({onLogin}) {
   );
 }
 
+// ── OBRACUN VIEW ─────────────────────────────────────────────────────────────
+function ObracunView({poslovi, placanjeColor}) {
+  const [fromDoc, setFromDoc] = useState("");
+  const [toDoc,   setToDoc]   = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate,   setToDate]   = useState("");
+
+  // Filter poslovi by range
+  const filtered = useMemo(() => {
+    let rows = poslovi;
+    if (fromDoc.trim()) {
+      const fromNum = parseInt(fromDoc.replace(/\D/g,""));
+      if (!isNaN(fromNum)) rows = rows.filter(p => (p.posaoNum||0) >= fromNum);
+    }
+    if (toDoc.trim()) {
+      const toNum = parseInt(toDoc.replace(/\D/g,""));
+      if (!isNaN(toNum)) rows = rows.filter(p => (p.posaoNum||0) <= toNum);
+    }
+    if (fromDate) rows = rows.filter(p => p.DatumUnosa && p.DatumUnosa >= fromDate);
+    if (toDate)   rows = rows.filter(p => p.DatumUnosa && p.DatumUnosa <= toDate);
+    return rows;
+  }, [poslovi, fromDoc, toDoc, fromDate, toDate]);
+
+  const sums = useMemo(() => {
+    const s = {};
+    filtered.forEach(p => {
+      if (!p.Placanje) return;
+      s[p.Placanje] = (s[p.Placanje]||0) + (parseFloat(p.Obracun)||0);
+    });
+    return s;
+  }, [filtered]);
+
+  const totalSum   = Object.values(sums).reduce((a,b)=>a+b,0);
+  const hasFilter  = fromDoc||toDoc||fromDate||toDate;
+
+  const inp = {background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,
+    padding:"7px 11px",color:T.text,fontSize:13,fontFamily:T.fontBody,outline:"none",colorScheme:"dark",boxSizing:"border-box"};
+
+  return <>
+    <PageHeader title="Obračun po načinu plaćanja"/>
+
+    {/* Range filter bar */}
+    <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"16px 20px",marginBottom:18}}>
+      <div style={{color:T.textMid,fontSize:12,fontWeight:600,marginBottom:12,textTransform:"uppercase",letterSpacing:"0.06em"}}>Opseg dokumenata</div>
+      <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"flex-end"}}>
+        <div>
+          <label style={{display:"block",color:T.textSoft,fontSize:11,fontWeight:500,marginBottom:4}}>Od broja dokumenta</label>
+          <input value={fromDoc} onChange={e=>setFromDoc(e.target.value)} placeholder="npr. P00000001 ili 1" style={{...inp,width:180}}/>
+        </div>
+        <div>
+          <label style={{display:"block",color:T.textSoft,fontSize:11,fontWeight:500,marginBottom:4}}>Do broja dokumenta</label>
+          <input value={toDoc} onChange={e=>setToDoc(e.target.value)} placeholder="npr. P00000100 ili 100" style={{...inp,width:180}}/>
+        </div>
+        <div style={{width:1,height:36,background:T.border,alignSelf:"flex-end",marginBottom:2}}/>
+        <div>
+          <label style={{display:"block",color:T.textSoft,fontSize:11,fontWeight:500,marginBottom:4}}>Od datuma unosa</label>
+          <input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)} style={{...inp,width:160}}/>
+        </div>
+        <div>
+          <label style={{display:"block",color:T.textSoft,fontSize:11,fontWeight:500,marginBottom:4}}>Do datuma unosa</label>
+          <input type="date" value={toDate} onChange={e=>setToDate(e.target.value)} style={{...inp,width:160}}/>
+        </div>
+        {hasFilter && (
+          <button onClick={()=>{setFromDoc("");setToDoc("");setFromDate("");setToDate("");}}
+            style={{...btnS("ghost"),padding:"7px 14px",fontSize:12,alignSelf:"flex-end"}}>
+            ✕ Resetuj filter
+          </button>
+        )}
+      </div>
+      {hasFilter && (
+        <div style={{marginTop:10,color:T.textSoft,fontSize:12}}>
+          Prikazano <strong style={{color:T.text}}>{filtered.length}</strong> od <strong style={{color:T.text}}>{poslovi.length}</strong> poslova
+        </div>
+      )}
+    </div>
+
+    {/* Stat cards */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:10,marginBottom:22}}>
+      {Object.entries(sums).map(([nacin,suma])=>(
+        <StatCard key={nacin} label={nacin} value={suma.toLocaleString()+" RSD"} color={placanjeColor(nacin)}
+          sub={`${filtered.filter(p=>p.Placanje===nacin).length} poslova`}/>
+      ))}
+      {Object.keys(sums).length === 0 && (
+        <div style={{gridColumn:"1/-1",color:T.textSoft,fontSize:13,padding:"20px 0"}}>Nema poslova u zadatom opsegu.</div>
+      )}
+    </div>
+
+    {/* Summary table */}
+    <div style={{background:T.surface,borderRadius:T.radius,border:`1px solid ${T.border}`,overflowX:"auto"}}>
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <thead><tr>{["Plaćanje","Broj poslova","Ukupan obračun"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+        <tbody>
+          {Object.entries(sums).map(([nacin,suma],i)=>(
+            <tr key={nacin} style={{background:i%2===0?T.surface:T.surfaceHover}}>
+              <td style={{...tdS,fontWeight:600}}><PlacanjeBadge val={nacin}/></td>
+              <td style={{...tdS,color:T.textMid}}>{filtered.filter(p=>p.Placanje===nacin).length}</td>
+              <td style={{...tdS,color:T.green,fontWeight:700}}>{suma.toLocaleString()} RSD</td>
+            </tr>
+          ))}
+          {Object.keys(sums).length > 0 && (
+            <tr style={{borderTop:`2px solid ${T.border}`,background:T.surfaceRaised}}>
+              <td style={{...tdS,fontWeight:700,color:T.text}}>UKUPNO</td>
+              <td style={{...tdS,fontWeight:700,color:T.textMid}}>{filtered.length}</td>
+              <td style={{...tdS,color:T.primary,fontWeight:800,fontSize:16,fontFamily:T.fontHead}}>{totalSum.toLocaleString()} RSD</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+
+    {/* Detail table */}
+    {filtered.length > 0 && (
+      <div style={{marginTop:18}}>
+        <div style={{color:T.textMid,fontSize:12,fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Detalji — {filtered.length} poslova</div>
+        <div style={{background:T.surface,borderRadius:T.radius,border:`1px solid ${T.border}`,overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead><tr>
+              {["Posao","Klijent","Datum","Plaćanje","Specifikacija","Obračun"].map(h=><th key={h} style={thS}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {filtered.map((p,i)=>(
+                <tr key={p.id} style={{background:i%2===0?T.surface:T.surfaceHover}}>
+                  <td style={{...tdS,color:T.primary,fontWeight:700}}>{p.Posao}</td>
+                  <td style={{...tdS,fontWeight:500}}>{p.KLIJENT}</td>
+                  <td style={{...tdS,color:T.textMid,fontSize:12}}>{fmtDate(p.DatumUnosa)}</td>
+                  <td style={tdS}><PlacanjeBadge val={p.Placanje}/></td>
+                  <td style={{...tdS,color:T.textMid,fontSize:12,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.SpecifikacijaCene||"—"}</td>
+                  <td style={{...tdS,color:T.green,fontWeight:700}}>{p.Obracun?`${parseFloat(p.Obracun).toLocaleString()} RSD`:"—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )}
+  </>;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function App() {
   const [authUser,setAuthUser]       = useState(null);
@@ -742,7 +990,6 @@ export default function App() {
   const montazaRows   = useMemo(()=>poslovi.filter(p=>p.MontazaIsporuka==="Montaža i isporuka"),[poslovi]);
   const isporukaRows  = useMemo(()=>poslovi.filter(p=>p.MontazaIsporuka==="Samo isporuka"||p.MontazaIsporuka==="Montaža i isporuka"),[poslovi]);
   const knjigenjeRows = useMemo(()=>poslovi.filter(p=>p.ZavrsenPosao&&p.Placanje==="Faktura"),[poslovi]);
-  const obracunSums   = useMemo(()=>{ const s={}; poslovi.forEach(p=>{ const k=p.Placanje||"—"; s[k]=(s[k]||0)+(parseFloat(p.Obracun)||0); }); return s; },[poslovi]);
 
   const perm    = tab => profile?.tab_permissions?.[tab]||"none";
   const canSee  = tab => perm(tab)!=="none";
@@ -815,7 +1062,7 @@ export default function App() {
     if (!tempData.prezime?.trim()) e.prezime="Obavezno.";
     if (Object.keys(e).length) { setTempErrors(e); return; }
     setSaving(true);
-    const row={ime:tempData.ime,prezime:tempData.prezime,telefon:tempData.telefon,adresa:tempData.adresa,is_admin:tempData.is_admin||false,tab_permissions:tempData.tab_permissions||{}};
+    const row={ime:tempData.ime,prezime:tempData.prezime,telefon:tempData.telefon,adresa:tempData.adresa,is_admin:tempData.is_admin||false,tab_permissions:tempData.tab_permissions||{},can_publish_layouts:tempData.can_publish_layouts||false};
     const {error} = await sb.from("profiles").update(row).eq("id",editingUser);
     setSaving(false);
     if (error) { setGlobalErr("Greška: "+error.message); return; }
@@ -940,7 +1187,7 @@ export default function App() {
 
         {view==="poslovi" && <>
           <PageHeader title="Svi poslovi"/>
-          <PosaoTable rows={poslovi} viewKey="poslovi" canEdit={canEdit("poslovi")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id})}/>
+          <PosaoTable rows={poslovi} viewKey="poslovi" canEdit={canEdit("poslovi")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id})} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
         {view==="aktivni" && <>
@@ -951,7 +1198,7 @@ export default function App() {
             <StatCard label="Ukupan obračun" value={aktivniRows.reduce((s,p)=>s+(parseFloat(p.Obracun)||0),0).toLocaleString()+" RSD"} color={T.green}/>
           </div>
           <PosaoTable rows={aktivniRows} viewKey="aktivni" canEdit={canEdit("aktivni")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id})}
-            onInlineZavrsen={canEdit("aktivni")?(id,v)=>inlineUpdate(id,"ZavrsenPosao",v):null}/>
+            onInlineZavrsen={canEdit("aktivni")?(id,v)=>inlineUpdate(id,"ZavrsenPosao",v):null} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
         {view==="zavrseni" && <>
@@ -960,28 +1207,28 @@ export default function App() {
             <StatCard label="Završenih" value={zavrseniRows.length} color={T.green}/>
             <StatCard label="Ukupan obračun" value={zavrseniRows.reduce((s,p)=>s+(parseFloat(p.Obracun)||0),0).toLocaleString()+" RSD"} color={T.primary}/>
           </div>
-          <PosaoTable rows={zavrseniRows} viewKey="zavrseni" canEdit={canEdit("zavrseni")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id})}/>
+          <PosaoTable rows={zavrseniRows} viewKey="zavrseni" canEdit={canEdit("zavrseni")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id})} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
         {view==="radionica" && <>
           <PageHeader title="Radionica" subtitle="Status izrade se menja samo ovde"/>
           <SimpleTable rows={poslovi} viewKey="radionica"
             columns={simpleCols([["Posao","Posao"],["KLIJENT","Klijent"],["SifraKupca","Šifra"],["DatumUnosa","Datum"],["RokZaIsporuku","Rok"],["Unosilac","Unosilac"],["Opis","Opis"],["StatusIzrade","Status izrade"]])}
-            renderCell={simpleRender("StatusIzrade",p=><InlineCheck val={p.StatusIzrade} onChange={v=>canEdit("radionica")&&inlineUpdate(p.id,"StatusIzrade",v)} disabled={!canEdit("radionica")}/>)}/>
+            renderCell={simpleRender("StatusIzrade",p=><InlineCheck val={p.StatusIzrade} onChange={v=>canEdit("radionica")&&inlineUpdate(p.id,"StatusIzrade",v)} disabled={!canEdit("radionica")}/>)} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
         {view==="montaza" && <>
           <PageHeader title="Montaža" subtitle="Status montaže se menja samo ovde"/>
           <SimpleTable rows={montazaRows} viewKey="montaza"
             columns={simpleCols([["Posao","Posao"],["KLIJENT","Klijent"],["SifraKupca","Šifra"],["DatumUnosa","Datum"],["RokZaIsporuku","Rok"],["Unosilac","Unosilac"],["Opis","Opis"],["StatusMontaze","Status montaže"]])}
-            renderCell={simpleRender("StatusMontaze",p=><InlineCheck val={p.StatusMontaze} onChange={v=>canEdit("montaza")&&inlineUpdate(p.id,"StatusMontaze",v)} disabled={!canEdit("montaza")}/>)}/>
+            renderCell={simpleRender("StatusMontaze",p=><InlineCheck val={p.StatusMontaze} onChange={v=>canEdit("montaza")&&inlineUpdate(p.id,"StatusMontaze",v)} disabled={!canEdit("montaza")}/>)} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
         {view==="isporuka" && <>
           <PageHeader title="Isporuka" subtitle="Status isporuke se menja samo ovde"/>
           <SimpleTable rows={isporukaRows} viewKey="isporuka"
             columns={simpleCols([["Posao","Posao"],["KLIJENT","Klijent"],["SifraKupca","Šifra"],["DatumUnosa","Datum"],["RokZaIsporuku","Rok"],["Unosilac","Unosilac"],["Opis","Opis"],["StatusIsporuke","Status isporuke"]])}
-            renderCell={simpleRender("StatusIsporuke",p=><InlineCheck val={p.StatusIsporuke} onChange={v=>canEdit("isporuka")&&inlineUpdate(p.id,"StatusIsporuke",v)} disabled={!canEdit("isporuka")}/>)}/>
+            renderCell={simpleRender("StatusIsporuke",p=><InlineCheck val={p.StatusIsporuke} onChange={v=>canEdit("isporuka")&&inlineUpdate(p.id,"StatusIsporuke",v)} disabled={!canEdit("isporuka")}/>)} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
         {view==="knjizenje" && <>
@@ -1004,44 +1251,18 @@ export default function App() {
               if (key==="Obracun") return <span style={{fontWeight:700,color:T.green}}>{p.Obracun?`${parseFloat(p.Obracun).toLocaleString()} RSD`:"—"}</span>;
               if (key==="Fakturisano") return <InlineCheck val={p.Fakturisano} onChange={v=>canEdit("knjizenje")&&inlineUpdate(p.id,"Fakturisano",v)} disabled={!canEdit("knjizenje")}/>;
               return <span style={{color:T.textMid}}>{String(p[key]??"—")}</span>;
-            }}/>
+            }} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
-        {view==="kupci" && <KupciView kupci={kupci} canEdit={canEdit("kupci")} onNew={openNewKupac} onEdit={openEditKupac} onDelete={id=>setConfirmDelete({type:"kupac",id})} onView={setViewingKupac}/>}
+        {view==="kupci" && <KupciView kupci={kupci} canEdit={canEdit("kupci")} onNew={openNewKupac} onEdit={openEditKupac} onDelete={id=>setConfirmDelete({type:"kupac",id})} onView={setViewingKupac} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>}
 
-        {view==="obracun" && <>
-          <PageHeader title="Obračun po načinu plaćanja"/>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:10,marginBottom:22}}>
-            {Object.entries(obracunSums).map(([nacin,suma])=>(
-              <StatCard key={nacin} label={nacin} value={suma.toLocaleString()+" RSD"} color={placanjeColor(nacin)} sub={`${poslovi.filter(p=>p.Placanje===nacin).length} poslova`}/>
-            ))}
-          </div>
-          <div style={{background:T.surface,borderRadius:T.radius,border:`1px solid ${T.border}`,overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead><tr>{["Plaćanje","Broj poslova","Ukupan obračun"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
-              <tbody>
-                {Object.entries(obracunSums).map(([nacin,suma],i)=>(
-                  <tr key={nacin} style={{background:i%2===0?T.surface:T.surfaceHover}}>
-                    <td style={{...tdS,fontWeight:600}}><PlacanjeBadge val={nacin}/></td>
-                    <td style={{...tdS,color:T.textMid}}>{poslovi.filter(p=>p.Placanje===nacin).length}</td>
-                    <td style={{...tdS,color:T.green,fontWeight:700}}>{suma.toLocaleString()} RSD</td>
-                  </tr>
-                ))}
-                <tr style={{borderTop:`2px solid ${T.border}`,background:T.surfaceRaised}}>
-                  <td style={{...tdS,fontWeight:700,color:T.text}}>UKUPNO</td>
-                  <td style={{...tdS,fontWeight:700,color:T.textMid}}>{poslovi.length}</td>
-                  <td style={{...tdS,color:T.primary,fontWeight:800,fontSize:16,fontFamily:T.fontHead}}>{Object.values(obracunSums).reduce((a,b)=>a+b,0).toLocaleString()} RSD</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </>}
+        {view==="obracun" && <ObracunView poslovi={poslovi} placanjeColor={placanjeColor}/>}
 
         {view==="korisnici" && <>
           <PageHeader title="Korisnici"/>
           <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`}}>
             <table style={{width:"100%",borderCollapse:"collapse",background:T.surface}}>
-              <thead><tr>{["Ime","Prezime","Telefon","Adresa","Rola","Dozvole",...(profile.is_admin?[""]:[])].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+              <thead><tr>{["Ime","Prezime","Telefon","Adresa","Rola","Obj. rasporede","Dozvole",...(profile.is_admin?[""]:[])].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
               <tbody>
                 {users.map((u,i)=>(
                   <tr key={u.id} style={{background:i%2===0?T.surface:T.surfaceHover}} onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight} onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover}>
@@ -1050,6 +1271,7 @@ export default function App() {
                     <td style={{...tdS,color:T.textMid}}>{u.telefon}</td>
                     <td style={{...tdS,color:T.textMid,fontSize:12}}>{u.adresa}</td>
                     <td style={tdS}>{u.is_admin?<span style={{background:T.primaryLight,color:T.primary,border:`1px solid ${T.primaryBorder}`,borderRadius:5,padding:"2px 9px",fontSize:11,fontWeight:600}}>Admin</span>:<span style={{background:T.surfaceRaised,color:T.textMid,border:`1px solid ${T.border}`,borderRadius:5,padding:"2px 9px",fontSize:11,fontWeight:600}}>Korisnik</span>}</td>
+                    <td style={tdS}>{u.can_publish_layouts||u.is_admin?<span style={{background:T.purpleBg,color:T.purple,border:`1px solid ${T.purpleBorder}`,borderRadius:5,padding:"2px 9px",fontSize:11,fontWeight:600}}>✓ Da</span>:<span style={{color:T.textSoft,fontSize:12}}>—</span>}</td>
                     <td style={tdS}><div style={{display:"flex",flexWrap:"wrap",gap:3}}>
                       {ALL_TABS.map(t=>{const p=u.tab_permissions?.[t.key];if(!p||p==="none")return null;
                         return <span key={t.key} style={{background:p==="edit"?T.greenBg:T.amberBg,color:p==="edit"?T.green:T.amber,border:`1px solid ${p==="edit"?T.greenBorder:T.amberBorder}`,borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:600}}>{t.label}</span>;
@@ -1184,6 +1406,18 @@ export default function App() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div style={{marginTop:14,padding:"12px 14px",background:T.purpleBg,border:`1px solid ${T.purpleBorder}`,borderRadius:T.radiusSm,display:"flex",alignItems:"center",gap:10}}>
+            <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",flex:1}}>
+              <input type="checkbox"
+                checked={tempData.can_publish_layouts||false}
+                onChange={e=>setTempData(d=>({...d,can_publish_layouts:e.target.checked}))}
+                style={{accentColor:T.purple,width:15,height:15}}/>
+              <div>
+                <div style={{color:T.purple,fontSize:13,fontWeight:600}}>🌐 Može da objavljuje zajedničke rasporede kolona</div>
+                <div style={{color:T.textSoft,fontSize:11,marginTop:2}}>Ovaj korisnik može sačuvati raspored kolona koji će biti vidljiv svim korisnicima</div>
+              </div>
+            </label>
           </div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:20,borderTop:`1px solid ${T.border}`,paddingTop:16}}>
             <button onClick={closeModal} style={btnS("ghost")}>Otkaži</button>
