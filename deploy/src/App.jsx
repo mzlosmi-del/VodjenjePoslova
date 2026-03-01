@@ -340,10 +340,11 @@ function useTableControls(viewKey, defaultCols, currentUser, canPublishLayouts) 
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [layoutName, setLayoutName] = useState("");
   const [saveAsShared, setSaveAsShared] = useState(false);
+  const [saveAsDefault, setSaveAsDefault] = useState(false);
   const [layoutsLoaded, setLayoutsLoaded] = useState(false);
   const dragCol = useRef(null);
 
-  // Load layouts and apply shared default on mount
+  // Load layouts and apply the user's default (or shared default) on mount
   useEffect(() => {
     if (!currentUser) return;
     (async () => {
@@ -353,10 +354,10 @@ function useTableControls(viewKey, defaultCols, currentUser, canPublishLayouts) 
         .order("created_at", { ascending: true });
       if (data) {
         setLayouts(data);
-        // If user has their own saved layout, prefer it
-        const mine = data.find(l => l.user_id === currentUser.id && !l.is_shared);
-        const shared = data.find(l => l.is_shared);
-        const toApply = mine || shared;
+        // Priority: user's own default > shared layout > nothing
+        const myDefault = data.find(l => l.user_id === currentUser.id && l.is_default);
+        const shared    = data.find(l => l.is_shared);
+        const toApply   = myDefault || shared;
         if (toApply) setCols(toApply.cols);
       }
       setLayoutsLoaded(true);
@@ -367,19 +368,48 @@ function useTableControls(viewKey, defaultCols, currentUser, canPublishLayouts) 
 
   async function saveLayout() {
     if (!layoutName.trim() || !currentUser) return;
-    const payload = { user_id: currentUser.id, view_key: viewKey, name: layoutName.trim(), cols, is_shared: saveAsShared && canPublishLayouts };
-    // Upsert: if user already has a layout with same name+view, update it
+    const isDefault = saveAsDefault;
+    const isShared  = saveAsShared && canPublishLayouts;
+    const payload   = { user_id: currentUser.id, view_key: viewKey, name: layoutName.trim(), cols, is_shared: isShared, is_default: isDefault };
+
+    // If marking as default, clear previous default for this user+view first
+    if (isDefault) {
+      const prevDefault = layouts.find(l => l.user_id === currentUser.id && l.is_default && l.view_key === viewKey);
+      if (prevDefault) {
+        await sb.from("column_layouts").update({ is_default: false }).eq("id", prevDefault.id);
+        setLayouts(prev => prev.map(l => l.id === prevDefault.id ? {...l, is_default: false} : l));
+      }
+    }
+
     const existing = layouts.find(l => l.user_id === currentUser.id && l.name === layoutName.trim() && l.view_key === viewKey);
     let result;
     if (existing) {
-      result = await sb.from("column_layouts").update({ cols, is_shared: payload.is_shared, updated_at: new Date().toISOString() }).eq("id", existing.id).select().single();
+      result = await sb.from("column_layouts").update({ cols, is_shared: isShared, is_default: isDefault, updated_at: new Date().toISOString() }).eq("id", existing.id).select().single();
     } else {
       result = await sb.from("column_layouts").insert([payload]).select().single();
     }
     if (result.data) {
       setLayouts(prev => existing ? prev.map(l => l.id===existing.id ? result.data : l) : [...prev, result.data]);
     }
-    setShowSaveDialog(false); setLayoutName("");
+    setShowSaveDialog(false); setLayoutName(""); setSaveAsDefault(false); setSaveAsShared(false);
+  }
+
+  async function setAsDefault(layout) {
+    // Clear previous default for this user+view
+    const prevDefault = layouts.find(l => l.user_id === currentUser.id && l.is_default);
+    if (prevDefault && prevDefault.id !== layout.id) {
+      await sb.from("column_layouts").update({ is_default: false }).eq("id", prevDefault.id);
+    }
+    // Set new default
+    const isNowDefault = !layout.is_default;
+    await sb.from("column_layouts").update({ is_default: isNowDefault }).eq("id", layout.id);
+    setLayouts(prev => prev.map(l => {
+      if (l.user_id === currentUser.id && l.is_default && l.id !== layout.id) return {...l, is_default: false};
+      if (l.id === layout.id) return {...l, is_default: isNowDefault};
+      return l;
+    }));
+    // Apply immediately if setting as default
+    if (isNowDefault) setCols(layout.cols);
   }
 
   async function deleteLayout(id) {
@@ -456,11 +486,17 @@ function useTableControls(viewKey, defaultCols, currentUser, canPublishLayouts) 
               {/* Saved layouts section */}
               {(myLayouts.length > 0 || sharedLayouts.length > 0) && (
                 <div style={{marginBottom:12}}>
-                  <div style={{color:T.textSoft,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Sačuvani rasporedi</div>
+                  <div style={{color:T.textSoft,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>
+                    Sačuvani rasporedi <span style={{color:T.textSoft,fontWeight:400,fontSize:9,marginLeft:4}}>★ = podrazumevani</span>
+                  </div>
                   {sharedLayouts.map(l=>(
-                    <div key={l.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                    <div key={l.id} style={{display:"flex",alignItems:"center",gap:4,marginBottom:4}}>
                       <button onClick={()=>applyLayout(l)} style={{flex:1,textAlign:"left",background:T.primaryLight,border:`1px solid ${T.primaryBorder}`,color:T.primary,borderRadius:T.radiusSm,padding:"5px 9px",cursor:"pointer",fontSize:12,fontFamily:T.fontBody,fontWeight:600}}>
                         🌐 {l.name}
+                      </button>
+                      <button onClick={()=>setAsDefault(l)} title={l.is_default?"Ukloni kao podrazumevani":"Postavi kao podrazumevani"}
+                        style={{background:l.is_default?T.amberBg:"none",border:`1px solid ${l.is_default?T.amberBorder:T.border}`,color:l.is_default?T.amber:T.textSoft,borderRadius:T.radiusSm,padding:"4px 7px",cursor:"pointer",fontSize:12}}>
+                        {l.is_default?"★":"☆"}
                       </button>
                       {l.user_id === currentUser?.id && (
                         <button onClick={()=>deleteLayout(l.id)} style={{background:"none",border:`1px solid ${T.redBorder}`,color:T.red,borderRadius:T.radiusSm,padding:"4px 7px",cursor:"pointer",fontSize:11}}>✕</button>
@@ -468,9 +504,13 @@ function useTableControls(viewKey, defaultCols, currentUser, canPublishLayouts) 
                     </div>
                   ))}
                   {myLayouts.filter(l=>!l.is_shared).map(l=>(
-                    <div key={l.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-                      <button onClick={()=>applyLayout(l)} style={{flex:1,textAlign:"left",background:T.surfaceRaised,border:`1px solid ${T.border}`,color:T.text,borderRadius:T.radiusSm,padding:"5px 9px",cursor:"pointer",fontSize:12,fontFamily:T.fontBody}}>
+                    <div key={l.id} style={{display:"flex",alignItems:"center",gap:4,marginBottom:4}}>
+                      <button onClick={()=>applyLayout(l)} style={{flex:1,textAlign:"left",background:l.is_default?`rgba(251,191,36,0.08)`:T.surfaceRaised,border:`1px solid ${l.is_default?T.amberBorder:T.border}`,color:T.text,borderRadius:T.radiusSm,padding:"5px 9px",cursor:"pointer",fontSize:12,fontFamily:T.fontBody}}>
                         👤 {l.name}
+                      </button>
+                      <button onClick={()=>setAsDefault(l)} title={l.is_default?"Ukloni kao podrazumevani":"Postavi kao podrazumevani"}
+                        style={{background:l.is_default?T.amberBg:"none",border:`1px solid ${l.is_default?T.amberBorder:T.border}`,color:l.is_default?T.amber:T.textSoft,borderRadius:T.radiusSm,padding:"4px 7px",cursor:"pointer",fontSize:12}}>
+                        {l.is_default?"★":"☆"}
                       </button>
                       <button onClick={()=>deleteLayout(l.id)} style={{background:"none",border:`1px solid ${T.redBorder}`,color:T.red,borderRadius:T.radiusSm,padding:"4px 7px",cursor:"pointer",fontSize:11}}>✕</button>
                     </div>
@@ -516,6 +556,10 @@ function useTableControls(viewKey, defaultCols, currentUser, canPublishLayouts) 
                   placeholder="npr. Moj pregled" autoFocus
                   style={{width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"dark"}}/>
               </div>
+              <label style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,cursor:"pointer"}}>
+                <input type="checkbox" checked={saveAsDefault} onChange={e=>setSaveAsDefault(e.target.checked)} style={{accentColor:T.amber,width:15,height:15}}/>
+                <span style={{color:T.textMid,fontSize:13}}>★ Postavi kao podrazumevani (učitava se pri svakom otvaranju)</span>
+              </label>
               {canPublishLayouts && (
                 <label style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,cursor:"pointer"}}>
                   <input type="checkbox" checked={saveAsShared} onChange={e=>setSaveAsShared(e.target.checked)} style={{accentColor:T.primary,width:15,height:15}}/>
@@ -1086,7 +1130,7 @@ export default function App() {
   const [authUser,setAuthUser]       = useState(null);
   const [profile,setProfile]         = useState(null);
   const [authLoading,setAuthLoading] = useState(true);
-  const [view,setView]               = useState("aktivni");
+  const [view,setView]               = useState(()=>sessionStorage.getItem("lastView")||"aktivni");
   const [poslovi,setPoslovi]         = useState([]);
   const [kupci,setKupci]             = useState([]);
   const [izradaOptions,setIzradaOptions] = useState([]);
@@ -1344,7 +1388,7 @@ export default function App() {
           </div>
           <nav style={{display:"flex",gap:1,flex:1,overflowX:"auto"}}>
             {visibleTabs.map(t=>(
-              <button key={t.key} onClick={()=>setView(t.key)} style={{
+              <button key={t.key} onClick={()=>{setView(t.key);sessionStorage.setItem("lastView",t.key);}} style={{
                 background:view===t.key?T.primaryLight:"none",border:"none",
                 color:view===t.key?T.primary:T.textSoft,borderRadius:T.radiusSm,
                 padding:"5px 12px",cursor:"pointer",fontSize:12,fontWeight:view===t.key?600:400,
