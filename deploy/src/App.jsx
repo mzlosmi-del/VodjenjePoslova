@@ -558,7 +558,7 @@ const POSAO_COLS_DEFAULT = [
   {key:"Fakturisano",visible:false,label:"Fakturisano"},
 ];
 
-function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZavrsen, currentUser, canPublishLayouts}) {
+function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZavrsen, onCopy, currentUser, canPublishLayouts}) {
   const ctrl = useTableControls(viewKey, POSAO_COLS_DEFAULT, currentUser, canPublishLayouts);
   const visibleCols = ctrl.cols.filter(c=>c.visible);
   const processed = ctrl.filterAndSort(rows);
@@ -618,7 +618,11 @@ function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZ
                   <td style={tdS} onClick={e=>e.stopPropagation()}>
                     <div style={{display:"flex",gap:5}}>
                       {canEdit
-                        ? <><button onClick={()=>onEdit(p)} style={btnS("edit")}>Uredi</button><button onClick={()=>onDelete(p.id)} style={btnS("danger")}>Briši</button></>
+                        ? <>
+                            <button onClick={()=>onEdit(p)} style={btnS("edit")}>Uredi</button>
+                            {onCopy&&<button onClick={()=>onCopy(p)} title="Kopiraj posao" style={{...btnS("ghost"),padding:"5px 10px",fontSize:12}}>⧉</button>}
+                            <button onClick={()=>onDelete(p.id)} style={btnS("danger")}>Briši</button>
+                          </>
                         : <button onClick={()=>onView(p)} style={btnS("ghost")}>Pregled</button>}
                     </div>
                   </td>
@@ -1074,32 +1078,6 @@ function ObracunView({poslovi, placanjeColor}) {
         </tbody>
       </table>
     </div>
-
-    {/* Detail table */}
-    {filtered.length > 0 && (
-      <div>
-        <div style={{color:T.textMid,fontSize:12,fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Detalji — {filtered.length} poslova</div>
-        <div style={{background:T.surface,borderRadius:T.radius,border:`1px solid ${T.border}`,overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse"}}>
-            <thead><tr>
-              {["Posao","Klijent","Datum","Plaćanje","Specifikacija","Obračun"].map(h=><th key={h} style={thS}>{h}</th>)}
-            </tr></thead>
-            <tbody>
-              {filtered.map((p,i)=>(
-                <tr key={p.id} style={{background:i%2===0?T.surface:T.surfaceHover}}>
-                  <td style={{...tdS,color:T.primary,fontWeight:700}}>{p.Posao}</td>
-                  <td style={{...tdS,fontWeight:500}}>{p.KLIJENT}</td>
-                  <td style={{...tdS,color:T.textMid,fontSize:12}}>{fmtDate(p.DatumUnosa)}</td>
-                  <td style={tdS}><PlacanjeBadge val={p.Placanje}/></td>
-                  <td style={{...tdS,color:T.textMid,fontSize:12,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.SpecifikacijaCene||"—"}</td>
-                  <td style={{...tdS,color:T.green,fontWeight:700}}>{p.Obracun?`${parseFloat(p.Obracun).toLocaleString()} RSD`:"—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    )}
   </>;
 }
 
@@ -1205,6 +1183,25 @@ export default function App() {
     setTempData({posaoNum:n,Posao:formatPosaoNumber(n),KLIJENT:"",SifraKupca:"",DatumUnosa:todayISO(),RokZaIsporuku:"",Unosilac:defaultUnosilac,Opis:"",PoslatiNaIzradu:"",MontazaIsporuka:"",Placanje:"Faktura",StatusIzrade:false,StatusIsporuke:false,StatusMontaze:false,SpecifikacijaCene:"",Obracun:"",ZavrsenPosao:false,Fakturisano:false});
     setTempErrors({});
   }
+  async function copyPosao(p) {
+    const {data} = await sb.from("poslovi").select("posao_num").order("posao_num",{ascending:false}).limit(1);
+    const n = data&&data.length>0 ? data[0].posao_num+1 : 1;
+    const unosilac = profile ? `${profile.ime||""} ${profile.prezime||""}`.trim() : "";
+    setNewPosao(true);
+    setTempData({
+      posaoNum:n, Posao:formatPosaoNumber(n),
+      KLIJENT:p.KLIJENT, SifraKupca:p.SifraKupca,
+      DatumUnosa:todayISO(), RokZaIsporuku:p.RokZaIsporuku||"",
+      Unosilac:unosilac, Opis:p.Opis,
+      PoslatiNaIzradu:p.PoslatiNaIzradu, MontazaIsporuka:p.MontazaIsporuka,
+      Placanje:p.Placanje,
+      StatusIzrade:false, StatusIsporuke:false, StatusMontaze:false,
+      SpecifikacijaCene:p.SpecifikacijaCene, Obracun:p.Obracun,
+      ZavrsenPosao:false, Fakturisano:false,
+    });
+    setTempErrors({});
+  }
+
   async function savePosao() {
     setSaving(true);
     const row = appToDB(tempData);
@@ -1378,7 +1375,7 @@ export default function App() {
 
         {view==="poslovi" && <>
           <PageHeader title="Svi poslovi"/>
-          <PosaoTable rows={poslovi} viewKey="poslovi" canEdit={canEdit("poslovi")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id})} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
+          <PosaoTable rows={poslovi} viewKey="poslovi" canEdit={canEdit("poslovi")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id})} onCopy={canEdit("poslovi")?copyPosao:null} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
         {view==="aktivni" && <>
@@ -1389,7 +1386,7 @@ export default function App() {
             <StatCard label="Ukupan obračun" value={aktivniRows.reduce((s,p)=>s+(parseFloat(p.Obracun)||0),0).toLocaleString()+" RSD"} color={T.green}/>
           </div>
           <PosaoTable rows={aktivniRows} viewKey="aktivni" canEdit={canEdit("aktivni")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id})}
-            onInlineZavrsen={canEdit("aktivni")?(id,v)=>inlineUpdate(id,"ZavrsenPosao",v):null} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
+            onInlineZavrsen={canEdit("aktivni")?(id,v)=>inlineUpdate(id,"ZavrsenPosao",v):null} onCopy={canEdit("aktivni")?copyPosao:null} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
         {view==="zavrseni" && <>
@@ -1398,7 +1395,7 @@ export default function App() {
             <StatCard label="Završenih" value={zavrseniRows.length} color={T.green}/>
             <StatCard label="Ukupan obračun" value={zavrseniRows.reduce((s,p)=>s+(parseFloat(p.Obracun)||0),0).toLocaleString()+" RSD"} color={T.primary}/>
           </div>
-          <PosaoTable rows={zavrseniRows} viewKey="zavrseni" canEdit={canEdit("zavrseni")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id})} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
+          <PosaoTable rows={zavrseniRows} viewKey="zavrseni" canEdit={canEdit("zavrseni")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id})} onCopy={canEdit("zavrseni")?copyPosao:null} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
         {view==="radionica" && <>
