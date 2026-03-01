@@ -2153,7 +2153,7 @@ function ManualView({ profile }) {
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,margin:"6px 0 12px"}}>
         {[["Dan","Jedan stub po kalendarskom danu. Pogodno za kratke periode."],
           ["Sedmica","Grupisano po ISO sedmici — oznaka je datum ponedeljka te sedmice."],
-          ["Mesec","Grupisano po mesecu — oznaka je npr. „Jan 2025". Podrazumevano."],
+          ["Mesec","Grupisano po mesecu — oznaka je npr. 'Jan 2025'. Podrazumevano."],
           ["Ukupno","Jedan jedini stub za ceo izabrani period — brzi ukupni pregled."]
         ].map(([k,d],i)=>(
           <div key={i} style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"8px 11px"}}>
