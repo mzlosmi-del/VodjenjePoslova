@@ -776,27 +776,87 @@ function LoginScreen({onLogin}) {
 
 // ── OBRACUN VIEW ─────────────────────────────────────────────────────────────
 function ObracunView({poslovi, placanjeColor}) {
-  const [fromDoc, setFromDoc] = useState("");
-  const [toDoc,   setToDoc]   = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate,   setToDate]   = useState("");
+  const [groupBy,  setGroupBy]  = useState("month"); // day | week | month | total
+  const [tooltip,  setTooltip]  = useState(null);    // {x,y,label,items}
+  const chartRef = useRef(null);
 
-  // Filter poslovi by range
+  const inp = {background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,
+    padding:"7px 11px",color:T.text,fontSize:13,fontFamily:T.fontBody,outline:"none",colorScheme:"dark",boxSizing:"border-box"};
+
+  // Filter by date
   const filtered = useMemo(() => {
     let rows = poslovi;
-    if (fromDoc.trim()) {
-      const fromNum = parseInt(fromDoc.replace(/\D/g,""));
-      if (!isNaN(fromNum)) rows = rows.filter(p => (p.posaoNum||0) >= fromNum);
-    }
-    if (toDoc.trim()) {
-      const toNum = parseInt(toDoc.replace(/\D/g,""));
-      if (!isNaN(toNum)) rows = rows.filter(p => (p.posaoNum||0) <= toNum);
-    }
     if (fromDate) rows = rows.filter(p => p.DatumUnosa && p.DatumUnosa >= fromDate);
     if (toDate)   rows = rows.filter(p => p.DatumUnosa && p.DatumUnosa <= toDate);
     return rows;
-  }, [poslovi, fromDoc, toDoc, fromDate, toDate]);
+  }, [poslovi, fromDate, toDate]);
 
+  // All unique placanje types (stable order)
+  const placanjeTypes = useMemo(() => {
+    const s = new Set(filtered.map(p=>p.Placanje).filter(Boolean));
+    return [...s].sort();
+  }, [filtered]);
+
+  // Color per placanje (cycle through palette)
+  const PALETTE = [T.primary, T.green, T.amber, T.purple, T.red, "#22D3EE", "#FB923C"];
+  const placanjeColorMap = useMemo(() => {
+    const m = {};
+    placanjeTypes.forEach((t,i) => { m[t] = PALETTE[i % PALETTE.length]; });
+    return m;
+  }, [placanjeTypes]);
+
+  // Group key function
+  function getGroupKey(dateStr) {
+    if (!dateStr) return "—";
+    if (groupBy === "total") return "Ukupno";
+    if (groupBy === "day") return dateStr; // yyyy-mm-dd
+    if (groupBy === "month") return dateStr.slice(0,7); // yyyy-mm
+    if (groupBy === "week") {
+      const d = new Date(dateStr);
+      // ISO week: find Monday
+      const day = d.getDay() || 7;
+      d.setDate(d.getDate() - day + 1);
+      return d.toISOString().slice(0,10); // Monday of the week
+    }
+    return dateStr;
+  }
+
+  function formatGroupLabel(key) {
+    if (key === "Ukupno") return "Ukupno";
+    if (groupBy === "day") {
+      const [y,m,d] = key.split("-"); return `${d}.${m}.${y}`;
+    }
+    if (groupBy === "month") {
+      const [y,m] = key.split("-");
+      const names = ["","Jan","Feb","Mar","Apr","Maj","Jun","Jul","Avg","Sep","Okt","Nov","Dec"];
+      return `${names[parseInt(m)]} ${y}`;
+    }
+    if (groupBy === "week") {
+      const [y,m,d] = key.split("-"); return `${d}.${m}`;
+    }
+    return key;
+  }
+
+  // Build chart data: array of {key, label, byPlacanje:{type->sum}, total}
+  const chartData = useMemo(() => {
+    const groups = {};
+    filtered.forEach(p => {
+      if (!p.DatumUnosa || !p.Placanje) return;
+      const key = getGroupKey(p.DatumUnosa);
+      if (!groups[key]) groups[key] = { key, byPlacanje: {} };
+      groups[key].byPlacanje[p.Placanje] = (groups[key].byPlacanje[p.Placanje]||0) + (parseFloat(p.Obracun)||0);
+    });
+    const sorted = Object.values(groups).sort((a,b) => a.key.localeCompare(b.key));
+    return sorted.map(g => ({
+      ...g,
+      label: formatGroupLabel(g.key),
+      total: Object.values(g.byPlacanje).reduce((s,v)=>s+v,0),
+    }));
+  }, [filtered, groupBy]);
+
+  // Summary sums
   const sums = useMemo(() => {
     const s = {};
     filtered.forEach(p => {
@@ -805,64 +865,195 @@ function ObracunView({poslovi, placanjeColor}) {
     });
     return s;
   }, [filtered]);
+  const totalSum = Object.values(sums).reduce((a,b)=>a+b,0);
+  const hasFilter = fromDate || toDate;
 
-  const totalSum   = Object.values(sums).reduce((a,b)=>a+b,0);
-  const hasFilter  = fromDoc||toDoc||fromDate||toDate;
+  // ── SVG Bar Chart ──────────────────────────────────────────────────────────
+  const BAR_H = 320;
+  const PAD_L = 80; const PAD_R = 20; const PAD_T = 20; const PAD_B = 60;
+  const chartW = 900; // viewBox width, scales with container
+  const innerW = chartW - PAD_L - PAD_R;
+  const innerH = BAR_H - PAD_T - PAD_B;
 
-  const inp = {background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,
-    padding:"7px 11px",color:T.text,fontSize:13,fontFamily:T.fontBody,outline:"none",colorScheme:"dark",boxSizing:"border-box"};
+  const maxVal = useMemo(() => {
+    if (!chartData.length) return 1;
+    return Math.max(...chartData.map(g=>g.total), 1);
+  }, [chartData]);
+
+  // Nice Y axis ticks
+  const yTicks = useMemo(() => {
+    const count = 5;
+    const step = Math.ceil(maxVal / count / 1000) * 1000 || 1;
+    const top = step * count;
+    return Array.from({length: count+1}, (_,i) => i * step);
+  }, [maxVal]);
+  const yMax = yTicks[yTicks.length-1] || 1;
+
+  const barGroupW = chartData.length > 0 ? innerW / chartData.length : innerW;
+  const barPad = Math.max(barGroupW * 0.15, 4);
+  const barW = Math.max(barGroupW - barPad * 2, 4);
+
+  function BarChart() {
+    return (
+      <svg viewBox={`0 0 ${chartW} ${BAR_H}`} style={{width:"100%",height:"auto",display:"block",overflow:"visible"}}
+        onMouseLeave={()=>setTooltip(null)}>
+        {/* Y gridlines + labels */}
+        {yTicks.map(v => {
+          const y = PAD_T + innerH - (v / yMax) * innerH;
+          return (
+            <g key={v}>
+              <line x1={PAD_L} x2={PAD_L+innerW} y1={y} y2={y} stroke={T.border} strokeWidth="1"/>
+              <text x={PAD_L-8} y={y+4} textAnchor="end" fontSize="11" fill={T.textSoft} fontFamily={T.fontBody}>
+                {v>=1000000 ? `${(v/1000000).toFixed(1)}M` : v>=1000 ? `${(v/1000).toFixed(0)}k` : v}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Bars */}
+        {chartData.map((g, gi) => {
+          const groupX = PAD_L + gi * barGroupW + barPad;
+          let stackY = PAD_T + innerH;
+          return (
+            <g key={g.key} onMouseMove={e=>{
+              const rect = chartRef.current?.getBoundingClientRect();
+              if (rect) setTooltip({x: e.clientX-rect.left, y: e.clientY-rect.top, label: g.label, items: g.byPlacanje, total: g.total});
+            }}>
+              {placanjeTypes.map(type => {
+                const val = g.byPlacanje[type] || 0;
+                if (!val) return null;
+                const bh = (val / yMax) * innerH;
+                stackY -= bh;
+                const color = placanjeColorMap[type];
+                return (
+                  <rect key={type} x={groupX} y={stackY} width={barW} height={bh}
+                    fill={color} fillOpacity="0.85" rx="2"
+                    style={{cursor:"pointer",transition:"fill-opacity 0.1s"}}
+                    onMouseEnter={e=>e.currentTarget.setAttribute("fill-opacity","1")}
+                    onMouseLeave={e=>e.currentTarget.setAttribute("fill-opacity","0.85")}/>
+                );
+              })}
+              {/* X label */}
+              <text x={groupX + barW/2} y={PAD_T+innerH+14} textAnchor="middle" fontSize="10"
+                fill={T.textSoft} fontFamily={T.fontBody}
+                transform={chartData.length > 10 ? `rotate(-35,${groupX+barW/2},${PAD_T+innerH+14})` : ""}>
+                {g.label}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Y axis line */}
+        <line x1={PAD_L} x2={PAD_L} y1={PAD_T} y2={PAD_T+innerH} stroke={T.borderStrong} strokeWidth="1.5"/>
+        {/* X axis line */}
+        <line x1={PAD_L} x2={PAD_L+innerW} y1={PAD_T+innerH} y2={PAD_T+innerH} stroke={T.borderStrong} strokeWidth="1.5"/>
+
+        {/* Empty state */}
+        {chartData.length === 0 && (
+          <text x={chartW/2} y={BAR_H/2} textAnchor="middle" fontSize="14" fill={T.textSoft} fontFamily={T.fontBody}>
+            Nema podataka za prikaz
+          </text>
+        )}
+      </svg>
+    );
+  }
 
   return <>
     <PageHeader title="Obračun po načinu plaćanja"/>
 
-    {/* Range filter bar */}
-    <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"16px 20px",marginBottom:18}}>
-      <div style={{color:T.textMid,fontSize:12,fontWeight:600,marginBottom:12,textTransform:"uppercase",letterSpacing:"0.06em"}}>Opseg dokumenata</div>
-      <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"flex-end"}}>
-        <div>
-          <label style={{display:"block",color:T.textSoft,fontSize:11,fontWeight:500,marginBottom:4}}>Od broja dokumenta</label>
-          <input value={fromDoc} onChange={e=>setFromDoc(e.target.value)} placeholder="npr. P00000001 ili 1" style={{...inp,width:180}}/>
-        </div>
-        <div>
-          <label style={{display:"block",color:T.textSoft,fontSize:11,fontWeight:500,marginBottom:4}}>Do broja dokumenta</label>
-          <input value={toDoc} onChange={e=>setToDoc(e.target.value)} placeholder="npr. P00000100 ili 100" style={{...inp,width:180}}/>
-        </div>
-        <div style={{width:1,height:36,background:T.border,alignSelf:"flex-end",marginBottom:2}}/>
-        <div>
-          <label style={{display:"block",color:T.textSoft,fontSize:11,fontWeight:500,marginBottom:4}}>Od datuma unosa</label>
-          <input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)} style={{...inp,width:160}}/>
-        </div>
-        <div>
-          <label style={{display:"block",color:T.textSoft,fontSize:11,fontWeight:500,marginBottom:4}}>Do datuma unosa</label>
-          <input type="date" value={toDate} onChange={e=>setToDate(e.target.value)} style={{...inp,width:160}}/>
-        </div>
-        {hasFilter && (
-          <button onClick={()=>{setFromDoc("");setToDoc("");setFromDate("");setToDate("");}}
-            style={{...btnS("ghost"),padding:"7px 14px",fontSize:12,alignSelf:"flex-end"}}>
-            ✕ Resetuj filter
-          </button>
-        )}
+    {/* Filter bar */}
+    <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"14px 20px",marginBottom:16,display:"flex",gap:16,flexWrap:"wrap",alignItems:"flex-end"}}>
+      <div>
+        <label style={{display:"block",color:T.textSoft,fontSize:11,fontWeight:500,marginBottom:4}}>Od datuma unosa</label>
+        <input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)} style={{...inp,width:155}}/>
+      </div>
+      <div>
+        <label style={{display:"block",color:T.textSoft,fontSize:11,fontWeight:500,marginBottom:4}}>Do datuma unosa</label>
+        <input type="date" value={toDate} onChange={e=>setToDate(e.target.value)} style={{...inp,width:155}}/>
       </div>
       {hasFilter && (
-        <div style={{marginTop:10,color:T.textSoft,fontSize:12}}>
-          Prikazano <strong style={{color:T.text}}>{filtered.length}</strong> od <strong style={{color:T.text}}>{poslovi.length}</strong> poslova
+        <button onClick={()=>{setFromDate("");setToDate("");}}
+          style={{...btnS("ghost"),padding:"7px 14px",fontSize:12,alignSelf:"flex-end"}}>
+          ✕ Resetuj
+        </button>
+      )}
+      {hasFilter && (
+        <div style={{color:T.textSoft,fontSize:12,alignSelf:"flex-end",paddingBottom:8}}>
+          <strong style={{color:T.text}}>{filtered.length}</strong> od <strong style={{color:T.text}}>{poslovi.length}</strong> poslova
         </div>
       )}
     </div>
 
     {/* Stat cards */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:10,marginBottom:22}}>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:10,marginBottom:20}}>
       {Object.entries(sums).map(([nacin,suma])=>(
-        <StatCard key={nacin} label={nacin} value={suma.toLocaleString()+" RSD"} color={placanjeColor(nacin)}
+        <StatCard key={nacin} label={nacin} value={suma.toLocaleString()+" RSD"} color={placanjeColorMap[nacin]||placanjeColor(nacin)}
           sub={`${filtered.filter(p=>p.Placanje===nacin).length} poslova`}/>
       ))}
       {Object.keys(sums).length === 0 && (
-        <div style={{gridColumn:"1/-1",color:T.textSoft,fontSize:13,padding:"20px 0"}}>Nema poslova u zadatom opsegu.</div>
+        <div style={{gridColumn:"1/-1",color:T.textSoft,fontSize:13,padding:"16px 0"}}>Nema poslova u zadatom opsegu.</div>
       )}
     </div>
 
+    {/* Chart */}
+    <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"18px 20px",marginBottom:18}}>
+      {/* Chart header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
+        <div style={{color:T.text,fontSize:14,fontWeight:600,fontFamily:T.fontHead}}>Obračun po periodu</div>
+        <div style={{display:"flex",gap:4}}>
+          {[["day","Dan"],["week","Sedmica"],["month","Mesec"],["total","Ukupno"]].map(([k,lbl])=>(
+            <button key={k} onClick={()=>setGroupBy(k)} style={{
+              background:groupBy===k?T.primary:T.surfaceRaised,
+              border:`1px solid ${groupBy===k?T.primary:T.border}`,
+              color:groupBy===k?"#fff":T.textMid,
+              borderRadius:T.radiusSm,padding:"5px 13px",cursor:"pointer",
+              fontSize:12,fontWeight:groupBy===k?600:400,fontFamily:T.fontBody,
+              transition:"all 0.15s",
+            }}>{lbl}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Legend */}
+      {placanjeTypes.length > 0 && (
+        <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:12}}>
+          {placanjeTypes.map(t=>(
+            <div key={t} style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{width:10,height:10,borderRadius:2,background:placanjeColorMap[t]||T.primary}}/>
+              <span style={{color:T.textMid,fontSize:12,fontFamily:T.fontBody}}>{t}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* SVG chart */}
+      <div ref={chartRef} style={{position:"relative"}}>
+        <BarChart/>
+        {/* Tooltip */}
+        {tooltip && (
+          <div style={{
+            position:"absolute",left:Math.min(tooltip.x+12, 700),top:Math.max(tooltip.y-60,0),
+            background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,
+            padding:"10px 14px",boxShadow:T.shadowMd,pointerEvents:"none",zIndex:10,minWidth:160,
+          }}>
+            <div style={{color:T.text,fontWeight:700,fontSize:13,marginBottom:6,fontFamily:T.fontHead}}>{tooltip.label}</div>
+            {Object.entries(tooltip.items).map(([type,val])=>(
+              <div key={type} style={{display:"flex",justifyContent:"space-between",gap:14,fontSize:12,color:T.textMid,marginBottom:2}}>
+                <span style={{color:placanjeColorMap[type]||T.primary,fontWeight:600}}>{type}</span>
+                <span style={{color:T.text,fontWeight:600}}>{val.toLocaleString()} RSD</span>
+              </div>
+            ))}
+            <div style={{borderTop:`1px solid ${T.border}`,marginTop:6,paddingTop:6,display:"flex",justifyContent:"space-between",fontSize:12}}>
+              <span style={{color:T.textSoft}}>Ukupno</span>
+              <span style={{color:T.primary,fontWeight:700}}>{tooltip.total.toLocaleString()} RSD</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+
     {/* Summary table */}
-    <div style={{background:T.surface,borderRadius:T.radius,border:`1px solid ${T.border}`,overflowX:"auto"}}>
+    <div style={{background:T.surface,borderRadius:T.radius,border:`1px solid ${T.border}`,overflowX:"auto",marginBottom:18}}>
       <table style={{width:"100%",borderCollapse:"collapse"}}>
         <thead><tr>{["Plaćanje","Broj poslova","Ukupan obračun"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
         <tbody>
@@ -886,7 +1077,7 @@ function ObracunView({poslovi, placanjeColor}) {
 
     {/* Detail table */}
     {filtered.length > 0 && (
-      <div style={{marginTop:18}}>
+      <div>
         <div style={{color:T.textMid,fontSize:12,fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Detalji — {filtered.length} poslova</div>
         <div style={{background:T.surface,borderRadius:T.radius,border:`1px solid ${T.border}`,overflowX:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse"}}>
