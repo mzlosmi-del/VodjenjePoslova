@@ -74,6 +74,7 @@ const ALL_TABS = [
   { key:"kupci",     label:"Kupci",            icon:"🏢" },
   { key:"obracun",   label:"Obračun",          icon:"💰" },
   { key:"korisnici", label:"Korisnici",        icon:"👥" },
+  { key:"uputstvo",  label:"Uputstvo",         icon:"📖" },
 ];
 
 const montazaIsporukaOptions = ["Samo isporuka","Montaža i isporuka","Lično preuzimanje"];
@@ -1125,6 +1126,1260 @@ function ObracunView({poslovi, placanjeColor}) {
   </>;
 }
 
+// ── UPUTSTVO (Manual) ────────────────────────────────────────────────────────
+function ManualView({ profile }) {
+  const [activeId, setActiveId] = useState("opste");
+  const contentRef = useRef(null);
+  const sectionRefs = useRef({});
+
+  const isAdmin = profile?.is_admin;
+  const perm = tab => isAdmin ? "edit" : (profile?.tab_permissions?.[tab] || "none");
+  const canSeeTab  = tab => perm(tab) !== "none";
+  const canEditTab = tab => perm(tab) === "edit";
+
+  // Sections visible to this user
+  const SECTIONS = [
+    { id:"opste",     title:"Opšte — navigacija i tabele", always:true },
+    { id:"kolone",    title:"Rasporedi kolona",            always:true },
+    { id:"poslovi",   title:"📋 Svi poslovi",             tab:"poslovi"  },
+    { id:"aktivni",   title:"⚡ Aktivni poslovi",         tab:"aktivni"  },
+    { id:"zavrseni",  title:"✅ Završeni poslovi",        tab:"zavrseni" },
+    { id:"radionica", title:"🔧 Radionica",               tab:"radionica"},
+    { id:"montaza",   title:"🏗 Montaža",                 tab:"montaza"  },
+    { id:"isporuka",  title:"🚚 Isporuka",                tab:"isporuka" },
+    { id:"knjizenje", title:"📒 Knjiženje",               tab:"knjizenje"},
+    { id:"kupci",     title:"🏢 Kupci",                   tab:"kupci"    },
+    { id:"obracun",   title:"💰 Obračun",                 tab:"obracun"  },
+    { id:"korisnici", title:"👥 Korisnici",               adminOnly:true },
+  ].filter(s => {
+    if (s.always) return true;
+    if (s.adminOnly) return isAdmin;
+    return canSeeTab(s.tab);
+  });
+
+  // Scroll‑spy
+  useEffect(() => {
+    const container = contentRef.current;
+    if (!container) return;
+    const handler = () => {
+      let found = SECTIONS[0].id;
+      for (const s of SECTIONS) {
+        const el = sectionRefs.current[s.id];
+        if (el && el.getBoundingClientRect().top - 120 <= 0) found = s.id;
+      }
+      setActiveId(found);
+    };
+    container.addEventListener("scroll", handler, { passive:true });
+    return () => container.removeEventListener("scroll", handler);
+  }, [SECTIONS.map(s=>s.id).join()]);
+
+  function scrollTo(id) {
+    sectionRefs.current[id]?.scrollIntoView({ behavior:"smooth", block:"start" });
+    setActiveId(id);
+  }
+
+  // ── Tiny shared components ────────────────────────────────────────────────
+  const Sec = ({ id, children }) => (
+    <div ref={el=>sectionRefs.current[id]=el} data-id={id}
+      style={{scrollMarginTop:20, marginBottom:52}}>
+      {children}
+    </div>
+  );
+
+  const H2 = ({ children }) => (
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,
+      paddingBottom:12,borderBottom:`2px solid ${T.border}`}}>
+      <div style={{width:4,height:24,background:T.primary,borderRadius:2,flexShrink:0}}/>
+      <h2 style={{margin:0,fontFamily:T.fontHead,fontSize:20,fontWeight:800,
+        color:T.text,letterSpacing:"-0.03em"}}>{children}</h2>
+    </div>
+  );
+
+  const H3 = ({ children }) => (
+    <h3 style={{margin:"20px 0 8px",fontFamily:T.fontHead,fontSize:14,fontWeight:700,
+      color:T.text,display:"flex",alignItems:"center",gap:7}}>
+      <span style={{color:T.primary,fontSize:16}}>›</span>{children}
+    </h3>
+  );
+
+  const P = ({ children }) => (
+    <p style={{margin:"0 0 10px",color:T.textMid,fontSize:13,lineHeight:1.8,fontFamily:T.fontBody}}>{children}</p>
+  );
+
+  const Ul = ({ items }) => (
+    <ul style={{margin:"4px 0 10px",paddingLeft:18,color:T.textMid,fontSize:13,lineHeight:1.85,fontFamily:T.fontBody}}>
+      {items.map((it,i)=><li key={i} style={{marginBottom:2}}>{it}</li>)}
+    </ul>
+  );
+
+  const Steps = ({ items }) => (
+    <div style={{margin:"8px 0 12px"}}>
+      {items.map((it,i)=>(
+        <div key={i} style={{display:"flex",gap:10,marginBottom:7,alignItems:"flex-start"}}>
+          <div style={{flexShrink:0,width:22,height:22,borderRadius:"50%",background:T.primary,
+            color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:11,fontWeight:700,fontFamily:T.fontBody,marginTop:1}}>{i+1}</div>
+          <div style={{color:T.textMid,fontSize:13,lineHeight:1.7,fontFamily:T.fontBody,flex:1}}>{it}</div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const Note = ({ icon="ℹ️", color=T.primary, children }) => (
+    <div style={{display:"flex",gap:9,background:`${color}10`,border:`1px solid ${color}28`,
+      borderRadius:T.radiusSm,padding:"9px 13px",margin:"10px 0",fontSize:12,
+      lineHeight:1.65,fontFamily:T.fontBody,color:T.textMid}}>
+      <span style={{fontSize:14,flexShrink:0}}>{icon}</span>
+      <span>{children}</span>
+    </div>
+  );
+  const Warn   = ({children}) => <Note icon="⚠️" color={T.amber}>{children}</Note>;
+  const Danger = ({children}) => <Note icon="🚫" color={T.red}>{children}</Note>;
+  const Tip    = ({children}) => <Note icon="💡" color={T.green}>{children}</Note>;
+
+  const Kbd = ({children}) => (
+    <kbd style={{background:T.surfaceRaised,border:`1px solid ${T.borderStrong}`,
+      borderRadius:4,padding:"1px 6px",fontSize:11,fontFamily:"monospace",color:T.text}}>{children}</kbd>
+  );
+
+  const Tag = ({children,color=T.primary,bg,bdr}) => (
+    <span style={{display:"inline-flex",alignItems:"center",
+      background:bg||`${color}1a`,color,border:`1px solid ${bdr||color+"35"}`,
+      borderRadius:4,padding:"1px 8px",fontSize:11,fontWeight:600,
+      fontFamily:T.fontBody,whiteSpace:"nowrap"}}>{children}</span>
+  );
+
+  // ── Mock screenshot components ───────────────────────────────────────────
+  const Frame = ({label,children,style={}}) => (
+    <div style={{margin:"14px 0",borderRadius:T.radius,border:`1px solid ${T.border}`,
+      overflow:"hidden",...style}}>
+      {label && (
+        <div style={{background:T.surfaceRaised,borderBottom:`1px solid ${T.border}`,
+          padding:"5px 12px",fontSize:10,color:T.textSoft,fontFamily:T.fontBody,
+          fontWeight:600,letterSpacing:"0.05em",textTransform:"uppercase"}}>
+          {label}
+        </div>
+      )}
+      <div style={{padding:14,background:T.bg}}>{children}</div>
+    </div>
+  );
+
+  const MNavbar = () => (
+    <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,
+      padding:"0 14px",display:"flex",alignItems:"center",height:44,gap:12,fontFamily:T.fontBody}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginRight:4}}>
+        <div style={{width:20,height:20,background:T.primary,borderRadius:5,
+          display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{width:7,height:7,background:"#fff",borderRadius:1.5,transform:"rotate(45deg)"}}/>
+        </div>
+        <span style={{fontWeight:700,color:T.text,fontSize:12,fontFamily:T.fontHead}}>Poslovi</span>
+      </div>
+      <div style={{display:"flex",gap:2,flex:1}}>
+        {[{i:"📋",l:"Poslovi",a:false},{i:"⚡",l:"Aktivni poslovi",a:true},{i:"✅",l:"Završeni",a:false},{i:"🔧",l:"Radionica",a:false}].map((t,i)=>(
+          <div key={i} style={{background:t.a?T.primaryLight:"none",color:t.a?T.primary:T.textSoft,
+            borderRadius:5,padding:"3px 9px",fontSize:10,fontWeight:t.a?600:400,
+            display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap"}}>
+            <span>{t.i}</span><span>{t.l}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <div style={{width:22,height:22,borderRadius:"50%",background:T.primaryLight,
+          border:`2px solid ${T.primaryBorder}`,display:"flex",alignItems:"center",
+          justifyContent:"center",fontSize:8,fontWeight:700,color:T.primary}}>AN</div>
+        <div>
+          <div style={{fontSize:10,fontWeight:600,color:T.text}}>Ana Nikolić</div>
+          <div style={{fontSize:9,color:T.textSoft}}>Korisnik</div>
+        </div>
+        <div style={{background:"none",border:`1px solid ${T.border}`,borderRadius:5,
+          padding:"3px 10px",fontSize:10,color:T.textMid}}>Odjava</div>
+      </div>
+    </div>
+  );
+
+  const MToolbar = () => (
+    <div style={{display:"flex",gap:8,marginBottom:8,fontFamily:T.fontBody}}>
+      <div style={{flex:1,background:T.surfaceRaised,border:`1px solid ${T.border}`,
+        borderRadius:T.radiusSm,padding:"6px 10px 6px 30px",fontSize:12,color:T.textSoft,position:"relative"}}>
+        <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",fontSize:13}}>🔍</span>
+        Pretraži... (Enter)
+      </div>
+      <div style={{background:"none",border:`1px solid ${T.border}`,color:T.textMid,
+        borderRadius:T.radiusSm,padding:"6px 12px",fontSize:11}}>⚙ Kolone</div>
+    </div>
+  );
+
+  const MTable = ({cols, rows}) => (
+    <div style={{overflowX:"auto",borderRadius:T.radiusSm,border:`1px solid ${T.border}`}}>
+      <table style={{width:"100%",borderCollapse:"collapse",background:T.surface,fontSize:11,fontFamily:T.fontBody}}>
+        <thead>
+          <tr>{cols.map((c,i)=>(
+            <th key={i} style={{padding:"6px 10px",textAlign:"left",color:T.textSoft,
+              fontSize:9,textTransform:"uppercase",letterSpacing:"0.07em",fontWeight:700,
+              borderBottom:`1px solid ${T.border}`,background:"#1C2330",whiteSpace:"nowrap"}}>
+              {c} <span style={{opacity:.4}}>↕</span>
+            </th>
+          ))}</tr>
+        </thead>
+        <tbody>
+          {rows.map((row,ri)=>(
+            <tr key={ri} style={{background:ri%2===0?T.surface:T.surfaceHover}}>
+              {row.map((cell,ci)=>(
+                <td key={ci} style={{padding:"6px 10px",borderBottom:`1px solid ${T.border}`,verticalAlign:"middle"}}>
+                  {typeof cell==="string"
+                    ? <span style={{color:T.textMid,fontSize:10}}>{cell}</span>
+                    : cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const MStat = ({label,value,color,sub}) => (
+    <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,
+      padding:"10px 16px",flex:"1 0 130px"}}>
+      <div style={{color:T.textSoft,fontSize:9,fontWeight:600,textTransform:"uppercase",
+        letterSpacing:"0.07em",marginBottom:3,fontFamily:T.fontBody}}>{label}</div>
+      <div style={{color,fontSize:18,fontWeight:800,fontFamily:T.fontHead,letterSpacing:"-0.02em"}}>{value}</div>
+      {sub&&<div style={{color:T.textSoft,fontSize:10,marginTop:2,fontFamily:T.fontBody}}>{sub}</div>}
+    </div>
+  );
+
+  const MCheck = ({yes}) => (
+    <span style={{display:"inline-flex",alignItems:"center",gap:5,cursor:"default"}}>
+      <span style={{width:15,height:15,borderRadius:3,border:`2px solid ${yes?T.green:T.border}`,
+        background:yes?T.greenBg:"transparent",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10}}>
+        {yes&&<span style={{color:T.green,fontWeight:700,lineHeight:1}}>✓</span>}
+      </span>
+      <span style={{color:yes?T.green:T.textSoft,fontSize:11,fontWeight:yes?600:400,fontFamily:T.fontBody}}>{yes?"Da":"Ne"}</span>
+    </span>
+  );
+
+  const MBadge = ({children,color=T.primary}) => (
+    <span style={{background:`${color}18`,color,border:`1px solid ${color}35`,
+      borderRadius:4,padding:"1px 7px",fontSize:10,fontWeight:600,fontFamily:T.fontBody}}>{children}</span>
+  );
+
+  const MColMenu = () => (
+    <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,
+      padding:12,width:260,fontSize:11,fontFamily:T.fontBody}}>
+      <div style={{color:T.textSoft,fontSize:9,fontWeight:700,textTransform:"uppercase",
+        letterSpacing:"0.07em",marginBottom:7}}>
+        Sačuvani rasporedi <span style={{fontWeight:400,opacity:.7}}>★ = podrazumevani</span>
+      </div>
+      {[{n:"Kompaktni pregled",shared:true,isDef:false},{n:"Moj pregled",shared:false,isDef:true}].map((l,i)=>(
+        <div key={i} style={{display:"flex",gap:4,marginBottom:4,alignItems:"center"}}>
+          <div style={{flex:1,background:l.shared?T.primaryLight:l.isDef?"rgba(251,191,36,.08)":T.surfaceRaised,
+            border:`1px solid ${l.shared?T.primaryBorder:l.isDef?T.amberBorder:T.border}`,
+            borderRadius:T.radiusSm,padding:"3px 8px",color:l.shared?T.primary:T.text,fontSize:10}}>
+            {l.shared?"🌐":"👤"} {l.n}
+          </div>
+          <div style={{background:l.isDef?T.amberBg:"none",border:`1px solid ${l.isDef?T.amberBorder:T.border}`,
+            color:l.isDef?T.amber:T.textSoft,borderRadius:T.radiusSm,padding:"2px 5px",fontSize:11}}>
+            {l.isDef?"★":"☆"}
+          </div>
+          {!l.shared&&<div style={{background:"none",border:`1px solid ${T.redBorder}`,color:T.red,
+            borderRadius:T.radiusSm,padding:"2px 5px",fontSize:10}}>✕</div>}
+        </div>
+      ))}
+      <div style={{borderTop:`1px solid ${T.border}`,margin:"8px 0"}}/>
+      <div style={{color:T.textSoft,fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>
+        Redosled kolona &nbsp;<span style={{fontWeight:400,opacity:.7}}>Prevuci da promeniš</span>
+      </div>
+      {["Posao","Klijent","Rok isporuke","Plaćanje","Status izrade"].map((c,i)=>(
+        <div key={i} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 7px",
+          background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,marginBottom:3}}>
+          <span style={{color:T.textSoft,cursor:"grab"}}>⠿</span>
+          <input type="checkbox" defaultChecked readOnly style={{accentColor:T.primary,width:11,height:11}}/>
+          <span style={{color:T.text,fontSize:11}}>{c}</span>
+        </div>
+      ))}
+      <div style={{display:"flex",gap:5,marginTop:8}}>
+        <div style={{flex:1,textAlign:"center",padding:"4px 0",border:`1px solid ${T.border}`,
+          borderRadius:T.radiusSm,color:T.textMid,fontSize:10}}>Resetuj</div>
+        <div style={{flex:1,textAlign:"center",padding:"4px 0",background:T.primary,
+          borderRadius:T.radiusSm,color:"#fff",fontSize:10}}>Sačuvaj raspored</div>
+      </div>
+    </div>
+  );
+
+  const MSaveDialog = () => (
+    <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radiusLg,
+      padding:"20px 22px",maxWidth:340,fontFamily:T.fontBody}}>
+      <div style={{fontFamily:T.fontHead,fontWeight:700,fontSize:15,color:T.text,marginBottom:14}}>
+        Sačuvaj raspored kolona
+      </div>
+      <div style={{marginBottom:10}}>
+        <div style={{color:T.textMid,fontSize:11,fontWeight:500,marginBottom:4}}>Naziv rasporeda</div>
+        <div style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,
+          padding:"7px 10px",fontSize:12,color:T.textSoft}}>npr. Moj pregled</div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:8,fontSize:12,color:T.textMid}}>
+        <input type="checkbox" readOnly defaultChecked style={{accentColor:T.amber,width:13,height:13}}/>
+        ★ Postavi kao podrazumevani (učitava se pri svakom otvaranju)
+      </div>
+      {(profile?.can_publish_layouts||isAdmin) && (
+        <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14,fontSize:12,color:T.textMid}}>
+          <input type="checkbox" readOnly style={{accentColor:T.primary,width:13,height:13}}/>
+          🌐 Objavi kao zajednički raspored (vidljiv svima)
+        </div>
+      )}
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <div style={{background:"none",border:`1px solid ${T.border}`,color:T.textMid,borderRadius:T.radiusSm,padding:"5px 14px",fontSize:12}}>Otkaži</div>
+        <div style={{background:T.primary,color:"#fff",borderRadius:T.radiusSm,padding:"5px 14px",fontSize:12,fontWeight:600}}>Sačuvaj</div>
+      </div>
+    </div>
+  );
+
+  const MForm = () => (
+    <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:16,fontFamily:T.fontBody}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 16px"}}>
+        {[["Posao (automatski)","P00000043","readonly"],["Datum unosa","15.05.2025","readonly"],
+          ["Klijent","K00002 — Tehno Export",""],["Rok za isporuku","30.06.2025",""],
+          ["Unosilac posla","Ana Nikolić ▼","dropdown"],["Opis","Aluminijumski profili",""],
+        ].map(([lbl,val,hint],i)=>(
+          <div key={i} style={{marginBottom:11,gridColumn:lbl==="Opis"?"1/-1":"auto"}}>
+            <div style={{color:T.textSoft,fontSize:10,fontWeight:500,marginBottom:3}}>{lbl}</div>
+            <div style={{background:hint==="readonly"?T.bg:T.surfaceRaised,border:`1px solid ${T.border}`,
+              borderRadius:T.radiusSm,padding:"6px 10px",fontSize:11,
+              color:hint==="readonly"?T.textSoft:T.text}}>{val}</div>
+          </div>
+        ))}
+        <div style={{gridColumn:"1/-1",marginBottom:10}}>
+          <div style={{color:T.textSoft,fontSize:10,fontWeight:500,marginBottom:3}}>Specifikacija cene</div>
+          <div style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"6px 10px",fontSize:11,color:T.text}}>—</div>
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{color:T.textSoft,fontSize:10,fontWeight:500,marginBottom:3}}>Obračun (RSD)</div>
+          <div style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"6px 10px",fontSize:11,color:T.text}}>95000</div>
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{color:T.textSoft,fontSize:10,fontWeight:500,marginBottom:3}}>Poslati na izradu</div>
+          <div style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"6px 10px",fontSize:11,color:T.text}}>Tip izrade A ▼</div>
+        </div>
+        <div style={{gridColumn:"1/-1",marginBottom:10}}>
+          <div style={{color:T.textSoft,fontSize:10,fontWeight:500,marginBottom:5}}>Montaža / Isporuka</div>
+          <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+            {[["Samo isporuka",T.green,T.greenBg,T.greenBorder,false],
+              ["Montaža i isporuka",T.primary,T.primaryLight,T.primaryBorder,false],
+              ["Lično preuzimanje",T.purple,T.purpleBg,T.purpleBorder,true]
+            ].map(([lbl,c,bg,bdr,active],i)=>(
+              <div key={i} style={{background:active?bg:T.surfaceRaised,border:`1.5px solid ${active?bdr:T.border}`,
+                color:active?c:T.textSoft,borderRadius:T.radiusSm,padding:"5px 12px",
+                fontSize:11,fontWeight:active?600:400,display:"flex",alignItems:"center",gap:6}}>
+                <span style={{width:9,height:9,borderRadius:"50%",border:`2px solid ${active?c:T.borderStrong}`,
+                  background:active?c:"transparent",flexShrink:0}}/>
+                {lbl}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{gridColumn:"1/-1",marginBottom:10}}>
+          <div style={{color:T.textSoft,fontSize:10,fontWeight:500,marginBottom:5}}>Plaćanje</div>
+          <div style={{display:"flex",gap:7}}>
+            {[["Faktura",T.primary,T.primaryLight,T.primaryBorder,false],
+              ["Otpremnica",T.amber,T.amberBg,T.amberBorder,true],
+              ["Zaduženje",T.purple,T.purpleBg,T.purpleBorder,false]
+            ].map(([lbl,c,bg,bdr,active],i)=>(
+              <div key={i} style={{background:active?bg:T.surfaceRaised,border:`1.5px solid ${active?bdr:T.border}`,
+                color:active?c:T.textSoft,borderRadius:T.radiusSm,padding:"5px 12px",
+                fontSize:11,fontWeight:active?600:400,display:"flex",alignItems:"center",gap:6}}>
+                <span style={{width:9,height:9,borderRadius:"50%",border:`2px solid ${active?c:T.borderStrong}`,
+                  background:active?c:"transparent",flexShrink:0}}/>
+                {lbl}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{gridColumn:"1/-1"}}>
+          <div style={{color:T.textSoft,fontSize:10,fontWeight:500,marginBottom:6}}>Završen posao</div>
+          <div style={{display:"inline-flex",alignItems:"center",gap:7,cursor:"pointer"}}>
+            <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${T.border}`,
+              background:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}/>
+            <span style={{color:T.textSoft,fontSize:12}}>Ne</span>
+          </div>
+        </div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginTop:14,padding:"10px 0",borderTop:`1px solid ${T.border}`,fontSize:10,color:T.textSoft,flexWrap:"wrap",gap:16}}>
+        {[["Status izrade","Radionica"],["Status isporuke","Isporuka"],["Status montaže","Montaža"],["Fakturisano","Knjiženje"]].map(([lbl,where],i)=>(
+          <div key={i}>
+            <div style={{marginBottom:3}}>{lbl}</div>
+            <span style={{background:T.surfaceRaised,color:T.textSoft,border:`1px solid ${T.border}`,
+              borderRadius:4,padding:"1px 7px",fontSize:10,fontWeight:600}}>— Ne</span>
+            <div style={{fontSize:9,color:T.primary,marginTop:2}}>→ {where}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14,borderTop:`1px solid ${T.border}`,paddingTop:14}}>
+        <div style={{background:"none",border:`1px solid ${T.border}`,color:T.textMid,
+          borderRadius:T.radiusSm,padding:"6px 16px",fontSize:12}}>Otkaži</div>
+        <div style={{background:T.primary,color:"#fff",borderRadius:T.radiusSm,
+          padding:"6px 16px",fontSize:12,fontWeight:600}}>Sačuvaj</div>
+      </div>
+    </div>
+  );
+
+  const MBarChart = () => {
+    const bars = [{l:"Jan",f:240,o:80,z:0},{l:"Feb",f:180,o:120,z:30},{l:"Mar",f:320,o:60,z:10},{l:"Apr",f:290,o:140,z:20}];
+    const H=90;
+    const maxV=Math.max(...bars.map(b=>b.f+b.o+b.z));
+    return (
+      <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"12px 16px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap",gap:8}}>
+          <span style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:T.fontBody}}>Obračun po periodu</span>
+          <div style={{display:"flex",gap:3}}>
+            {["Dan","Sedmica","Mesec","Ukupno"].map((l,i)=>(
+              <div key={i} style={{background:i===2?T.primary:T.surfaceRaised,
+                border:`1px solid ${i===2?T.primary:T.border}`,
+                color:i===2?"#fff":T.textMid,borderRadius:5,padding:"3px 9px",
+                fontSize:10,fontFamily:T.fontBody,fontWeight:i===2?600:400}}>{l}</div>
+            ))}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"flex-end",height:H,paddingLeft:36,position:"relative"}}>
+          <div style={{position:"absolute",left:0,top:0,bottom:0,display:"flex",flexDirection:"column",
+            justifyContent:"space-between",paddingBottom:0}}>
+            {["500k","400k","300k","200k","100k","0"].map((l,i)=>(
+              <div key={i} style={{color:T.textSoft,fontSize:8,fontFamily:T.fontBody,textAlign:"right",width:30}}>{l}</div>
+            ))}
+          </div>
+          {bars.map((b,i)=>{
+            const total=b.f+b.o+b.z;
+            const fH=(b.f/maxV)*H; const oH=(b.o/maxV)*H; const zH=(b.z/maxV)*H;
+            return (
+              <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:0}}>
+                <div style={{width:"70%",display:"flex",flexDirection:"column",justifyContent:"flex-end",height:H}}>
+                  <div style={{width:"100%",background:T.purple,opacity:.85,height:zH,borderRadius:zH>0?"2px 2px 0 0":"0"}}/>
+                  <div style={{width:"100%",background:T.amber,opacity:.85,height:oH}}/>
+                  <div style={{width:"100%",background:T.primary,opacity:.85,height:fH,borderRadius:"0 0 2px 2px"}}/>
+                </div>
+                <span style={{fontSize:9,color:T.textSoft,marginTop:4,fontFamily:T.fontBody}}>{b.l}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{display:"flex",gap:12,marginTop:8,paddingLeft:36}}>
+          {[{c:T.primary,l:"Faktura"},{c:T.amber,l:"Otpremnica"},{c:T.purple,l:"Zaduženje"}].map((x,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:4}}>
+              <div style={{width:8,height:8,borderRadius:2,background:x.c}}/>
+              <span style={{fontSize:9,color:T.textSoft,fontFamily:T.fontBody}}>{x.l}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const MTooltip = () => (
+    <div style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,
+      padding:"10px 14px",display:"inline-block",boxShadow:T.shadowMd,fontFamily:T.fontBody,minWidth:160}}>
+      <div style={{color:T.text,fontWeight:700,fontSize:12,marginBottom:6,fontFamily:T.fontHead}}>Mar 2025</div>
+      {[["Faktura",T.primary,"320.000"],["Otpremnica",T.amber,"60.000"]].map(([t,c,v],i)=>(
+        <div key={i} style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:11,marginBottom:2}}>
+          <span style={{color:c,fontWeight:600}}>{t}</span>
+          <span style={{color:T.text,fontWeight:600}}>{v} RSD</span>
+        </div>
+      ))}
+      <div style={{borderTop:`1px solid ${T.border}`,marginTop:6,paddingTop:6,
+        display:"flex",justifyContent:"space-between",fontSize:11}}>
+        <span style={{color:T.textSoft}}>Ukupno</span>
+        <span style={{color:T.primary,fontWeight:700}}>380.000 RSD</span>
+      </div>
+    </div>
+  );
+
+  const MPermTable = () => (
+    <div style={{overflowX:"auto",borderRadius:T.radiusSm,border:`1px solid ${T.border}`}}>
+      <table style={{width:"100%",borderCollapse:"collapse",background:T.surface,fontSize:11,fontFamily:T.fontBody}}>
+        <thead><tr>
+          <th style={{padding:"6px 10px",textAlign:"left",color:T.textSoft,fontSize:9,textTransform:"uppercase",letterSpacing:".07em",fontWeight:700,borderBottom:`1px solid ${T.border}`,background:"#1C2330"}}>Kartica</th>
+          <th style={{padding:"6px 10px",textAlign:"left",color:T.textSoft,fontSize:9,textTransform:"uppercase",letterSpacing:".07em",fontWeight:700,borderBottom:`1px solid ${T.border}`,background:"#1C2330"}}>Dozvola</th>
+        </tr></thead>
+        <tbody>
+          {[["📋 Poslovi","edit",T.green,T.greenBg,T.greenBorder],
+            ["⚡ Aktivni poslovi","edit",T.green,T.greenBg,T.greenBorder],
+            ["🔧 Radionica","view",T.amber,T.amberBg,T.amberBorder],
+            ["💰 Obračun","none",T.red,T.redBg,T.redBorder],
+          ].map(([tab,lvl,c,bg,bdr],i)=>(
+            <tr key={i} style={{background:i%2===0?T.surface:T.surfaceHover}}>
+              <td style={{padding:"6px 10px",borderBottom:`1px solid ${T.border}`,color:T.textMid,fontSize:11}}>{tab}</td>
+              <td style={{padding:"6px 10px",borderBottom:`1px solid ${T.border}`}}>
+                <div style={{display:"flex",gap:5}}>
+                  {[["none","Nema",T.red,T.redBg,T.redBorder],["view","Pregledaj",T.amber,T.amberBg,T.amberBorder],["edit","Uredi",T.green,T.greenBg,T.greenBorder]].map(([p,lbl,pc,pbg,pbdr])=>(
+                    <label key={p} style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",
+                      background:lvl===p?pbg:"none",border:`1px solid ${lvl===p?pbdr:T.border}`,
+                      borderRadius:T.radiusSm,padding:"2px 7px"}}>
+                      <input type="radio" readOnly checked={lvl===p} style={{accentColor:pc,margin:0,width:10,height:10}}/>
+                      <span style={{color:lvl===p?pc:T.textSoft,fontSize:10,fontWeight:lvl===p?600:400}}>{lbl}</span>
+                    </label>
+                  ))}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  // ── Section content functions ──────────────────────────────────────────────
+
+  function SOpste() { return (
+    <>
+      <P>Aplikacija <strong style={{color:T.text}}>Poslovi</strong> je sistem za upravljanje radnim nalozima — od unosa i izrade do isporuke i fakturisanja. Svaki korisnik vidi i može menjati samo one delove za koje mu je dodeljen pristup.</P>
+
+      <H3>Navigaciona traka</H3>
+      <Frame label="Izgled navigacione trake"><MNavbar/></Frame>
+      <P>Traka je uvek vidljiva na vrhu ekrana i sadrži:</P>
+      <Ul items={[
+        <><strong style={{color:T.text}}>Logo i naziv aplikacije</strong> — levo</>,
+        <><strong style={{color:T.text}}>Kartice (tabovi)</strong> — vidite samo one za koje imate pristup; aktivna je istaknuta plavo</>,
+        <><strong style={{color:T.text}}>Vaše ime, rola i dugme Odjava</strong> — desno</>,
+      ]}/>
+      <Note>Kada prelazite između kartica ili osvežite stranicu (<Kbd>F5</Kbd>), aplikacija automatski pamti i vraća vašu poslednju poziciju.</Note>
+
+      <H3>Pretraga unutar tabele</H3>
+      <Frame label="Toolbar — pretraga i upravljanje kolonama"><MToolbar/></Frame>
+      <Steps items={[
+        <>Ukucajte deo teksta u polje <strong style={{color:T.text}}>🔍 Pretraži... (Enter)</strong> — tabela se odmah filtrira pretragom kroz sve vidljive kolone istovremeno.</>,
+        <>Pritisnite <Kbd>Enter</Kbd> ili <Kbd>Tab</Kbd> da primenite pretragu. Pritisnite <Kbd>Escape</Kbd> ili kliknite <strong style={{color:T.text}}>×</strong> da je obrišete.</>,
+        <>Dok je pretraga aktivna, ivica polja za pretragu postaje plava kao vizuelni indikator.</>,
+      ]}/>
+
+      <H3>Sortiranje kolona</H3>
+      <P>Kliknite na <strong style={{color:T.text}}>zaglavlje bilo koje kolone</strong> da sortirate tabelu po njoj. Ikonica pored naziva kolone pokazuje aktivan smer:</P>
+      <div style={{display:"flex",gap:10,margin:"6px 0 10px",flexWrap:"wrap"}}>
+        <div style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"5px 12px",fontSize:12,color:T.textMid,fontFamily:T.fontBody}}>
+          Rok isporuke <span style={{color:T.primary,fontWeight:700}}>↑</span> — uzlazno
+        </div>
+        <div style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"5px 12px",fontSize:12,color:T.textMid,fontFamily:T.fontBody}}>
+          Rok isporuke <span style={{color:T.primary,fontWeight:700}}>↓</span> — silazno
+        </div>
+        <div style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"5px 12px",fontSize:12,color:T.textMid,fontFamily:T.fontBody}}>
+          Klijent <span style={{color:T.textSoft,opacity:.5}}>↕</span> — nije aktivno
+        </div>
+      </div>
+      <P>Ponovnim klikom na istu kolonu menjate smer. Klik na drugu kolonu prebacuje sortiranje na nju.</P>
+
+      <H3>Pregled zapisa (dupli klik)</H3>
+      <P>Duplim klikom na bilo koji red u tabeli otvara se modalni prozor sa svim detaljima tog zapisa. Prozor se zatvara klikom na <strong style={{color:T.text}}>× dugme</strong> u uglu ili pritiskom na <Kbd>Escape</Kbd>.</P>
+
+      <H3>Prevlačenje kolona</H3>
+      <P>Zaglavlja tabele možete <strong style={{color:T.text}}>prevlačiti levo i desno</strong> mišem da promenite redosled kolona. Uhvatite zaglavlje, prevucite ga na novu poziciju i pustite — promena se odmah primenjuje. Ovo je privremeno; da biste sačuvali raspored trajno, koristite dugme <strong style={{color:T.text}}>⚙ Kolone</strong> (opisano u sledećoj sekciji).</P>
+
+      <H3>Odjava</H3>
+      <P>Kliknite dugme <strong style={{color:T.text}}>Odjava</strong> u desnom uglu navigacione trake. Sesija se odmah prekida i bićete prebačeni na ekran za prijavu.</P>
+    </>
+  ); }
+
+  function SKolone() { return (
+    <>
+      <P>Svaka tabela u aplikaciji ima dugme <strong style={{color:T.text}}>⚙ Kolone</strong> u toolbaru iznad nje. Kroz ovaj meni možete potpuno prilagoditi koje kolone vidite i kojim redosledom — i sačuvati te postavke kao <em>raspored</em> koji se automatski primenjuje pri svakom otvaranju.</P>
+
+      <H3>Meni za upravljanje kolonama</H3>
+      <Frame label="Izgled menija ⚙ Kolone">
+        <div style={{display:"flex",gap:16,flexWrap:"wrap",alignItems:"flex-start"}}>
+          <MColMenu/>
+          <div style={{flex:1,minWidth:200,color:T.textSoft,fontSize:12,lineHeight:1.7,fontFamily:T.fontBody}}>
+            <div style={{marginBottom:6}}><Tag color={T.amber}>★</Tag> — podrazumevani raspored: učitava se automatski</div>
+            <div style={{marginBottom:6}}><Tag color={T.primary}>🌐</Tag> — zajednički raspored: vidljiv svim korisnicima</div>
+            <div><Tag color={T.textSoft}>👤</Tag> — vaš lični raspored</div>
+          </div>
+        </div>
+      </Frame>
+
+      <H3>Uključivanje i isključivanje kolona</H3>
+      <Steps items={[
+        <>Kliknite <strong style={{color:T.text}}>⚙ Kolone</strong> u toolbaru da otvorite meni.</>,
+        <>U delu <em>Redosled kolona</em> koristite <strong style={{color:T.text}}>kvačice</strong> pored svakog naziva da uključite ili isključite tu kolonu iz prikaza.</>,
+        <>Promena se odmah vidi u tabeli dok meni ostaje otvoren.</>,
+      ]}/>
+
+      <H3>Promena redosleda kolona</H3>
+      <Steps items={[
+        <>U istom meniju, uhvatite ikonicu <strong style={{color:T.textSoft}}>⠿</strong> pored naziva kolone.</>,
+        <>Prevucite je gore ili dole na željenu poziciju i pustite.</>,
+        <>Ili direktno prevlačite zaglavlja kolona u tabeli (drag & drop).</>,
+      ]}/>
+      <Note>Kliknite <strong style={{color:T.text}}>Resetuj</strong> na dnu menija da se u potpunosti vratite na fabrički raspored kolona.</Note>
+
+      <H3>Čuvanje rasporeda kolona</H3>
+      <Frame label="Dijalog za čuvanje rasporeda"><MSaveDialog/></Frame>
+      <Steps items={[
+        <>Podesite kolone po želji, zatim kliknite <strong style={{color:T.text}}>Sačuvaj raspored</strong> na dnu menija.</>,
+        <>Unesite naziv rasporeda (npr. <em>„Kompaktni pregled"</em>).</>,
+        <>Opciono označite <strong style={{color:T.amber}}>★ Postavi kao podrazumevani</strong> — ovaj raspored će se automatski učitati pri svakom sledećem otvaranju aplikacije.</>,
+        (profile?.can_publish_layouts||isAdmin) && <>Opciono označite <strong style={{color:T.primary}}>🌐 Objavi kao zajednički raspored</strong> — raspored postaje vidljiv svim korisnicima.</>,
+        <>Kliknite <strong style={{color:T.text}}>Sačuvaj</strong>. Raspored se pojavljuje u meniju ⚙ Kolone.</>,
+      ].filter(Boolean)}/>
+      <Tip>Rasporedi su zasebni za svaku tabelu — Poslovi, Kupci i ostale tabele pamte svoje rasporede nezavisno.</Tip>
+
+      <H3>Postavljanje podrazumevanog rasporeda (★)</H3>
+      <P>Pored svakog sačuvanog rasporeda stoji dugme sa zvezdicom:</P>
+      <div style={{margin:"8px 0",display:"flex",flexDirection:"column",gap:6}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,background:T.amberBg,border:`1px solid ${T.amberBorder}`,borderRadius:T.radiusSm,padding:"7px 12px",fontFamily:T.fontBody,fontSize:12}}>
+          <span style={{fontSize:16}}>★</span>
+          <span style={{color:T.amber,fontWeight:600}}>Zlatna zvezda</span>
+          <span style={{color:T.textMid}}>— ovaj raspored se automatski učitava pri svakom otvaranju aplikacije. Kliknite je ponovo da uklonite podrazumevani status.</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10,background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"7px 12px",fontFamily:T.fontBody,fontSize:12}}>
+          <span style={{fontSize:16,color:T.textSoft}}>☆</span>
+          <span style={{color:T.textSoft,fontWeight:600}}>Prazna zvezda</span>
+          <span style={{color:T.textMid}}>— raspored postoji ali nije podrazumevani. Kliknite je da ga postavite kao podrazumevani.</span>
+        </div>
+      </div>
+      <P>Samo jedan raspored može biti podrazumevani po tabeli. Kada postavite novi, prethodni automatski gubi tu ulogu. Ako nema podrazumevanog rasporeda, primenjuje se prvi pronađeni zajednički raspored (ako postoji), a inače fabrički raspored.</P>
+
+      {(profile?.can_publish_layouts||isAdmin) && <>
+        <H3>Objavljivanje zajedničkih rasporeda (🌐)</H3>
+        <P>Imate dozvolu da objavljujete zajedničke rasporede. Kada čuvate raspored, označite opciju <strong style={{color:T.primary}}>🌐 Objavi kao zajednički raspored</strong>. Taj raspored biće vidljiv svim korisnicima sistema kao predlog u meniju ⚙ Kolone. Svaki korisnik može imati sopstveni podrazumevani raspored koji ima prednost pred zajedničkim.</P>
+        <Note color={T.purple}>Zajednički raspored koji ste kreirali možete obrisati — samo vi i admini vidite dugme <strong style={{color:T.red}}>✕</strong> pored njega.</Note>
+      </>}
+    </>
+  ); }
+
+  function SPoslovi() {
+    const edit = canEditTab("poslovi");
+    return (
+      <>
+        <P>Kartica <strong style={{color:T.text}}>📋 Poslovi</strong> prikazuje <em>sve</em> radne naloge u sistemu — i aktivne i završene — bez ikakvog filtera.</P>
+
+        <H3>Tabela poslova</H3>
+        <Frame label="Primer tabele svih poslova">
+          <MToolbar/>
+          <MTable
+            cols={["Posao","Klijent","Šifra","Datum","Rok isporuke","Unosilac","Opis","Poslati","Montaža/Isporuka","Plaćanje","St. izrade","St. isporuke","St. montaže","Obračun",""]}
+            rows={[
+              [<span style={{color:T.primary,fontWeight:700,fontSize:11}}>P00000041</span>,"Metal d.o.o.","K00001","10.05.2025",<span style={{color:T.red,fontWeight:600,fontSize:10}}>01.04.2025</span>,"Ana K.","Metalne...",<MBadge>Tip A</MBadge>,<MBadge color={T.primary}>Montaža i is.</MBadge>,<MBadge>Faktura</MBadge>,<MCheck yes/>,<MCheck/>,<MCheck/>,"180.000 RSD",
+                <div style={{display:"flex",gap:3}}><span style={{background:T.primaryLight,color:T.primary,border:`1px solid ${T.primaryBorder}`,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:600}}>Uredi</span><span style={{background:"none",border:`1px solid ${T.border}`,color:T.textMid,borderRadius:4,padding:"2px 8px",fontSize:10}}>⧉</span><span style={{background:"none",border:`1px solid ${T.redBorder}`,color:T.red,borderRadius:4,padding:"2px 8px",fontSize:10}}>Briši</span></div>],
+              [<span style={{color:T.primary,fontWeight:700,fontSize:11}}>P00000042</span>,"Tehno Export","K00002","15.05.2025","30.06.2025","Petar P.","Alum...",<MBadge>Tip B</MBadge>,<MBadge color={T.green}>Samo isp.</MBadge>,<MBadge color={T.amber}>Otpremnica</MBadge>,<MCheck/>,<MCheck yes/>,<MCheck/>,"95.000 RSD",
+                <div style={{display:"flex",gap:3}}><span style={{background:T.primaryLight,color:T.primary,border:`1px solid ${T.primaryBorder}`,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:600}}>Uredi</span><span style={{background:"none",border:`1px solid ${T.border}`,color:T.textMid,borderRadius:4,padding:"2px 8px",fontSize:10}}>⧉</span><span style={{background:"none",border:`1px solid ${T.redBorder}`,color:T.red,borderRadius:4,padding:"2px 8px",fontSize:10}}>Briši</span></div>],
+            ]}
+          />
+        </Frame>
+
+        <H3>Objašnjenje kolona</H3>
+        <div style={{border:`1px solid ${T.border}`,borderRadius:T.radiusSm,overflow:"hidden",marginBottom:14}}>
+          {[["Posao","Jedinstveni broj naloga u formatu P00000001 — automatski generisan."],
+            ["Klijent","Naziv kupca iz baze kupaca."],
+            ["Šifra","Automatska šifra kupca u formatu K00001."],
+            ["Datum","Datum unosa naloga u sistem."],
+            ["Rok isporuke","Planirani datum isporuke. Prikazuje se crveno ako je rok prošao."],
+            ["Unosilac","Korisnik koji je uneo nalog."],
+            ["Opis","Slobodan opis posla — u tabeli skraćen, u pregledu prikazan u celosti."],
+            ["Poslati","Tip/opcija izrade poslan na izradu."],
+            ["Montaža/Isporuka","Vrsta isporuke: Samo isporuka (zeleno) · Montaža i isporuka (plavo) · Lično preuzimanje (ljubičasto)."],
+            ["Plaćanje","Faktura (plavo) · Otpremnica (narandžasto) · Zaduženje (ljubičasto)."],
+            ["St. izrade / St. isporuke / St. montaže","Statusi se menjaju isključivo u odgovarajućim karticama (Radionica, Isporuka, Montaža) — ovde su samo informativni."],
+            ["Obračun","Finansijski iznos posla u RSD."],
+          ].map(([n,d],i)=>(
+            <div key={i} style={{display:"grid",gridTemplateColumns:"190px 1fr",borderBottom:i<11?`1px solid ${T.border}`:"none",
+              background:i%2===0?T.surface:T.surfaceHover}}>
+              <div style={{padding:"7px 12px",color:T.text,fontSize:12,fontWeight:600,fontFamily:T.fontBody,borderRight:`1px solid ${T.border}`}}>{n}</div>
+              <div style={{padding:"7px 12px",color:T.textSoft,fontSize:12,fontFamily:T.fontBody,lineHeight:1.5}}>{d}</div>
+            </div>
+          ))}
+        </div>
+
+        {edit ? <>
+          <H3>Kreiranje novog posla</H3>
+          <Note>Dugme <strong>+ Novi posao</strong> nalazi se u kartici <strong>⚡ Aktivni poslovi</strong> — ne ovde. Vidite ga samo ako imate dozvolu za uređivanje te kartice.</Note>
+          <Steps items={[
+            <>Kliknite <strong style={{color:T.text}}>+ Novi posao</strong> u gornjem desnom uglu kartice Aktivni poslovi.</>,
+            <>Broj posla (<strong style={{color:T.primary}}>P00000001</strong>) i datum unosa (današnji) se automatski popunjavaju. Polje unosioca se popunjava vašim imenom.</>,
+            <>Popunite sva potrebna polja u formi (detalji u nastavku).</>,
+            <>Kliknite <strong style={{color:T.text}}>Sačuvaj</strong>. Posao je odmah vidljiv u svim relevantnim karticama.</>,
+          ]}/>
+
+          <H3>Forma za unos / izmenu posla</H3>
+          <Frame label="Forma za unos posla"><MForm/></Frame>
+          <div style={{border:`1px solid ${T.border}`,borderRadius:T.radiusSm,overflow:"hidden",marginBottom:14}}>
+            {[["Posao","Automatski generisan broj. Polje je zaključano."],
+              ["Datum unosa","Automatski postavljen na današnji datum pri kreiranju. Zaključan."],
+              ["Klijent","Padajuća lista sa pretragom — ukucajte deo naziva ili šifre kupca da filtrirate."],
+              ["Rok za isporuku","Birač datuma. Ako rok prođe, prikazuje se crveno u tabeli."],
+              ["Unosilac posla","Padajuća lista korisnika sistema sa pretragom. Podrazumevano vaše ime."],
+              ["Opis","Slobodan tekst — opišite sadržaj posla."],
+              ["Specifikacija cene","Slobodan tekst — detaljna specifikacija cenovnika."],
+              ["Obračun (RSD)","Numerička vrednost posla u dinarima."],
+              ["Poslati na izradu","Padajuća lista unapred definisanih opcija izrade."],
+              ["Montaža / Isporuka","Radio-dugmad: Samo isporuka · Montaža i isporuka · Lično preuzimanje."],
+              ["Plaćanje","Radio-dugmad: Faktura · Otpremnica · Zaduženje."],
+              ["Završen posao","Kvačica — označite kada je posao u celosti završen."],
+            ].map(([n,d],i)=>(
+              <div key={i} style={{display:"grid",gridTemplateColumns:"190px 1fr",borderBottom:i<11?`1px solid ${T.border}`:"none",
+                background:i%2===0?T.surface:T.surfaceHover}}>
+                <div style={{padding:"7px 12px",color:T.text,fontSize:12,fontWeight:600,fontFamily:T.fontBody,borderRight:`1px solid ${T.border}`}}>{n}</div>
+                <div style={{padding:"7px 12px",color:T.textSoft,fontSize:12,fontFamily:T.fontBody,lineHeight:1.5}}>{d}</div>
+              </div>
+            ))}
+          </div>
+          <Warn>Statusi izrade, isporuke, montaže i fakturisanja prikazani su u formi samo informativno i ne mogu se menjati odavde. Menjaju se isključivo direktnim klikom u karticama Radionica, Isporuka, Montaža i Knjiženje.</Warn>
+
+          <H3>Kopiranje posla (⧉)</H3>
+          <P>Svaki red u tabeli ima dugme <strong style={{color:T.text}}>⧉</strong> između „Uredi" i „Briši". Klikom na njega otvara se popunjena forma za novi posao sa sledećim automatskim promenama:</P>
+          <div style={{border:`1px solid ${T.border}`,borderRadius:T.radiusSm,overflow:"hidden",marginBottom:10}}>
+            {[["Broj posla","Sledeći slobodan broj u nizu (automatski)","green"],
+              ["Datum unosa","Današnji datum","green"],
+              ["Unosilac","Vaše ime (trenutno prijavljeni korisnik)","green"],
+              ["Status izrade","Ne","amber"],
+              ["Status isporuke","Ne","amber"],
+              ["Status montaže","Ne","amber"],
+              ["Završen posao","Ne","amber"],
+              ["Fakturisano","Ne","amber"],
+              ["Svi ostali podaci","Prenose se neizmenjeni","primary"],
+            ].map(([p,v,c],i)=>(
+              <div key={i} style={{display:"grid",gridTemplateColumns:"190px 1fr",borderBottom:i<8?`1px solid ${T.border}`:"none",
+                background:i%2===0?T.surface:T.surfaceHover}}>
+                <div style={{padding:"6px 12px",color:T.text,fontSize:12,fontWeight:500,fontFamily:T.fontBody,borderRight:`1px solid ${T.border}`}}>{p}</div>
+                <div style={{padding:"6px 12px",color:c==="green"?T.green:c==="amber"?T.amber:T.primary,fontSize:12,fontFamily:T.fontBody,fontWeight:600}}>→ {v}</div>
+              </div>
+            ))}
+          </div>
+          <Tip>Forma se otvara pre čuvanja — možete pregledati i izmeniti sve podatke pre nego što kliknete Sačuvaj. Kopiranje je korisno za ponavljajuće porudžbine istih klijenata.</Tip>
+
+          <H3>Brisanje posla</H3>
+          <Danger>Brisanje je <strong>trajno i ne može se poništiti</strong>. Pažljivo proverite pre potvrde.</Danger>
+          <Steps items={[
+            <>Kliknite <strong style={{color:T.red}}>Briši</strong> u redu koji želite obrisati.</>,
+            <>Pojavljuje se dijalog za potvrdu. Kliknite crveno <strong style={{color:T.red}}>Obriši</strong> da potvrdite, ili <strong style={{color:T.textMid}}>Otkaži</strong> da odustanete.</>,
+          ]}/>
+        </> : <>
+          <H3>Pregled posla</H3>
+          <P>Duplim klikom na red ili klikom na dugme <strong style={{color:T.textMid}}>Pregled</strong> otvara se modalni prozor sa svim detaljima posla. Ne možete menjati podatke — samo ih pregledati.</P>
+        </>}
+      </>
+    );
+  }
+
+  function SAktivni() {
+    const edit = canEditTab("aktivni");
+    return (
+      <>
+        <P>Kartica <strong style={{color:T.text}}>⚡ Aktivni poslovi</strong> prikazuje samo poslove kojima je <em>Završen posao = Ne</em>. Ovo je glavna radna površina za svakodnevno praćenje tekućih naloga.</P>
+
+        <H3>Statistike na vrhu</H3>
+        <Frame label="Kartice sa statistikama">
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <MStat label="Aktivnih" value="12" color={T.amber}/>
+            <MStat label="Ukupan obračun" value="1.840.000 RSD" color={T.green}/>
+          </div>
+        </Frame>
+        <P>Dve kartice prikazuju ukupan broj aktivnih poslova i zbir svih obračuna. Vrednosti se automatski ažuriraju kada primenite pretragu u tabeli.</P>
+
+        {edit ? <>
+          <H3>Kreiranje novog posla</H3>
+          <P>Kliknite <strong style={{color:T.text}}>+ Novi posao</strong> u gornjem desnom uglu. Detaljna uputstva za popunjavanje forme naći ćete u sekciji <strong style={{color:T.primary}}>📋 Svi poslovi</strong> ovog uputstva.</P>
+
+          <H3>Inline promena statusa „Završen"</H3>
+          <P>U koloni <strong style={{color:T.text}}>Završen</strong> možete direktno kliknuti na kvačicu — bez otvaranja forme:</P>
+          <Frame label="Direktna promena statusa Završen u tabeli">
+            <div style={{display:"flex",alignItems:"center",gap:16,padding:"4px 0",fontFamily:T.fontBody,flexWrap:"wrap"}}>
+              <div>
+                <div style={{fontSize:10,color:T.textSoft,marginBottom:5,textTransform:"uppercase",letterSpacing:".05em"}}>Pre klika</div>
+                <MCheck yes={false}/>
+              </div>
+              <span style={{color:T.textSoft,fontSize:18}}>→</span>
+              <div>
+                <div style={{fontSize:10,color:T.textSoft,marginBottom:5,textTransform:"uppercase",letterSpacing:".05em"}}>Nakon klika</div>
+                <MCheck yes={true}/>
+              </div>
+              <div style={{background:T.greenBg,border:`1px solid ${T.greenBorder}`,borderRadius:T.radiusSm,padding:"6px 12px",fontSize:11,color:T.green,fontFamily:T.fontBody}}>
+                Posao nestaje iz ovog pregleda i prelazi u ✅ Završeni poslovi
+              </div>
+            </div>
+          </Frame>
+          <P>Promena se odmah snima u bazu. Posao koji je označen kao završen nestaje iz ovog pregleda i pojavljuje se u kartici <strong style={{color:T.text}}>✅ Završeni poslovi</strong>.</P>
+        </> : <>
+          <P>Imate pravo pregleda — možete pregledati sve podatke ali ne možete menjati statuse niti dodavati nove poslove.</P>
+        </>}
+      </>
+    );
+  }
+
+  function SZavrseni() {
+    const edit = canEditTab("zavrseni");
+    return (
+      <>
+        <P>Kartica <strong style={{color:T.text}}>✅ Završeni poslovi</strong> prikazuje samo poslove kojima je <em>Završen posao = Da</em>. Ovo je arhiva kompletiranih radnih naloga.</P>
+        <Frame label="Statistike završenih poslova">
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <MStat label="Završenih" value="87" color={T.green}/>
+            <MStat label="Ukupan obračun" value="14.200.000 RSD" color={T.primary}/>
+          </div>
+        </Frame>
+        <P>Kartice prikazuju ukupan broj završenih poslova i zbir svih obračuna za prikazani skup. Kada primenite pretragu, statistike se ažuriraju prema filtriranom skupu — korisno za analizu po klijentu ili periodu.</P>
+        {edit && <Tip>Završeni poslovi se mogu kopirati dugmetom <strong style={{color:T.text}}>⧉</strong> da biste brzo kreirali sličan novi nalog — korisno za ponavljajuće porudžbine istog klijenta.</Tip>}
+        {!edit && <P>Imate pravo pregleda — možete pregledati arhivirane poslove ali ih ne možete menjati.</P>}
+      </>
+    );
+  }
+
+  function SRadionica() {
+    const edit = canEditTab("radionica");
+    return (
+      <>
+        <P>Kartica <strong style={{color:T.text}}>🔧 Radionica</strong> prikazuje <em>sve</em> poslove (i aktivne i završene) i namenjena je isključivo za evidentiranje fizičke izrade u radionici.</P>
+        <Warn>Status izrade se menja <strong>samo ovde</strong> — direktnim klikom na kvačicu u tabeli. U formi za uređivanje posla taj status se prikazuje samo informativno i nije moguće menjati ga odande.</Warn>
+
+        <H3>Tabela radionice</H3>
+        <Frame label="Tabela Radionica sa inline promenama statusa">
+          <MToolbar/>
+          <MTable
+            cols={["Posao","Klijent","Šifra","Datum","Rok","Unosilac","Opis","Status izrade"]}
+            rows={[
+              [<span style={{color:T.primary,fontWeight:700,fontSize:11}}>P00000041</span>,"Metal d.o.o.","K00001","10.05.2025","20.06.2025","Ana K.","Metalne kons.",<MCheck yes/>],
+              [<span style={{color:T.primary,fontWeight:700,fontSize:11}}>P00000042</span>,"Tehno Export","K00002","15.05.2025","30.06.2025","Petar P.","Alum. profili",<MCheck/>],
+            ]}
+          />
+        </Frame>
+
+        {edit ? <>
+          <H3>Promena statusa izrade</H3>
+          <Steps items={[
+            <>Pronađite posao u tabeli (koristite pretragu za brže pronalaženje).</>,
+            <>U koloni <strong style={{color:T.text}}>Status izrade</strong> kliknite direktno na kvačicu.</>,
+            <>Status se odmah menja i automatski snima — klik menja <MCheck/> u <MCheck yes/> i obrnuto.</>,
+          ]}/>
+        </> : <P>Imate pravo pregleda — vidite statuse ali ih ne možete menjati.</P>}
+      </>
+    );
+  }
+
+  function SMontaza() {
+    const edit = canEditTab("montaza");
+    return (
+      <>
+        <P>Kartica <strong style={{color:T.text}}>🏗 Montaža</strong> prikazuje samo poslove kojima je tip isporuke <strong style={{color:T.primary}}>Montaža i isporuka</strong>. Namenjena je praćenju da li je montaža na terenu obavljena.</P>
+        <Warn>Status montaže se menja <strong>samo ovde</strong> — direktnim klikom na kvačicu u koloni Status montaže.</Warn>
+        <Note>Poslovi sa tipom isporuke <em>Samo isporuka</em> ili <em>Lično preuzimanje</em> <strong>nisu vidljivi</strong> u ovoj kartici.</Note>
+
+        <H3>Tabela montaže</H3>
+        <Frame label="Tabela Montaža">
+          <MToolbar/>
+          <MTable
+            cols={["Posao","Klijent","Šifra","Datum","Rok","Unosilac","Opis","Status montaže"]}
+            rows={[
+              [<span style={{color:T.primary,fontWeight:700,fontSize:11}}>P00000041</span>,"Metal d.o.o.","K00001","10.05.2025","20.06.2025","Ana K.","Metalne kons.",<MCheck/>],
+              [<span style={{color:T.primary,fontWeight:700,fontSize:11}}>P00000039</span>,"Kovač d.o.o.","K00005","01.05.2025","15.06.2025","Petar P.","Čelične kons.",<MCheck yes/>],
+            ]}
+          />
+        </Frame>
+
+        {edit ? <>
+          <H3>Promena statusa montaže</H3>
+          <Steps items={[
+            <>Pronađite posao u tabeli.</>,
+            <>Kliknite direktno na kvačicu u koloni <strong style={{color:T.text}}>Status montaže</strong>.</>  ,
+            <>Promena se odmah snima bez dodatne potvrde.</>,
+          ]}/>
+        </> : <P>Imate pravo pregleda — vidite statuse ali ih ne možete menjati.</P>}
+      </>
+    );
+  }
+
+  function SIsporuka() {
+    const edit = canEditTab("isporuka");
+    return (
+      <>
+        <P>Kartica <strong style={{color:T.text}}>🚚 Isporuka</strong> prikazuje poslove kojima je tip isporuke <strong style={{color:T.green}}>Samo isporuka</strong> ili <strong style={{color:T.primary}}>Montaža i isporuka</strong>. Ovde se evidentira da li je roba fizički isporučena kupcu.</P>
+        <Warn>Status isporuke se menja <strong>samo ovde</strong> — direktnim klikom na kvačicu u koloni Status isporuke.</Warn>
+        <Note>Poslovi sa tipom isporuke <em>Lično preuzimanje</em> <strong>nisu vidljivi</strong> u ovoj kartici.</Note>
+
+        <H3>Tabela isporuke</H3>
+        <Frame label="Tabela Isporuka">
+          <MToolbar/>
+          <MTable
+            cols={["Posao","Klijent","Šifra","Datum","Rok","Unosilac","Opis","Status isporuke"]}
+            rows={[
+              [<span style={{color:T.primary,fontWeight:700,fontSize:11}}>P00000042</span>,"Tehno Export","K00002","15.05.2025","30.06.2025","Ana K.","Alum. profili",<MCheck/>],
+              [<span style={{color:T.primary,fontWeight:700,fontSize:11}}>P00000041</span>,"Metal d.o.o.","K00001","10.05.2025","20.06.2025","Petar P.","Metalne kons.",<MCheck yes/>],
+            ]}
+          />
+        </Frame>
+
+        {edit ? <>
+          <H3>Promena statusa isporuke</H3>
+          <Steps items={[
+            <>Pronađite posao u tabeli.</>,
+            <>Kliknite direktno na kvačicu u koloni <strong style={{color:T.text}}>Status isporuke</strong>.</>,
+            <>Promena se odmah snima bez dodatne potvrde.</>,
+          ]}/>
+        </> : <P>Imate pravo pregleda — vidite statuse ali ih ne možete menjati.</P>}
+      </>
+    );
+  }
+
+  function SKnjizenje() {
+    const edit = canEditTab("knjizenje");
+    return (
+      <>
+        <P>Kartica <strong style={{color:T.text}}>📒 Knjiženje</strong> prikazuje završene poslove sa načinom plaćanja <strong style={{color:T.primary}}>Faktura</strong>. Ovde se evidentira da li je svaka faktura proknjižena u računovodstvenom sistemu.</P>
+        <Note>U ovoj kartici prikazuju se <strong>isključivo</strong> završeni poslovi sa plaćanjem „Faktura". Otpremnice i zaduženja ovde nisu vidljivi.</Note>
+
+        <H3>Statistike knjiženja</H3>
+        <Frame label="Kartice sa statistikama knjiženja">
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <MStat label="Za knjiženje" value="24" color={T.primary}/>
+            <MStat label="Fakturisano" value="19" color={T.green}/>
+            <MStat label="Nije fakt." value="5" color={T.amber}/>
+            <MStat label="Ukupan obračun" value="8.640.000 RSD" color={T.textMid}/>
+          </div>
+        </Frame>
+        <P>Četiri kartice prikazuju ukupan broj faktura za knjiženje, koliko je fakturisano, koliko nije, i ukupnu vrednost. Ažuriraju se prema pretrazi.</P>
+
+        <H3>Tabela knjiženja</H3>
+        <Frame label="Tabela Knjiženja">
+          <MToolbar/>
+          <MTable
+            cols={["Posao","Klijent","Šifra","Datum","Opis","Specifikacija","Obračun","Fakturisano"]}
+            rows={[
+              [<span style={{color:T.primary,fontWeight:700,fontSize:11}}>P00000038</span>,"Metal d.o.o.","K00001","10.04.2025","Metalne kons.","Spec A","180.000 RSD",<MCheck yes/>],
+              [<span style={{color:T.primary,fontWeight:700,fontSize:11}}>P00000036</span>,"Tehno Export","K00002","01.04.2025","Alum. profili","Spec B","95.000 RSD",<MCheck/>],
+            ]}
+          />
+        </Frame>
+
+        {edit ? <>
+          <H3>Evidentiranje fakturisanja</H3>
+          <Steps items={[
+            <>Pronađite posao koji je proknjižen u vašem računovodstvenom sistemu.</>,
+            <>U koloni <strong style={{color:T.text}}>Fakturisano</strong> kliknite direktno na kvačicu.</>,
+            <>Status se odmah menja i snima. Statistike na vrhu automatski ažuriraju sve vrednosti.</>,
+          ]}/>
+        </> : <P>Imate pravo pregleda — vidite statuse fakturisanja ali ih ne možete menjati.</P>}
+      </>
+    );
+  }
+
+  function SKupci() {
+    const edit = canEditTab("kupci");
+    return (
+      <>
+        <P>Kartica <strong style={{color:T.text}}>🏢 Kupci</strong> je baza podataka svih klijenata. Kupci se koriste pri kreiranju radnih naloga — iz padajuće liste se biraju naziv i šifra kupca koja se automatski preuzima.</P>
+        <Note>Šifra kupca se automatski generiše u formatu <Tag>K00001</Tag>, <Tag>K00002</Tag>... rednim brojem pri kreiranju novog kupca — ne možete je ručno odrediti.</Note>
+
+        <H3>Tabela kupaca</H3>
+        <Frame label="Tabela Kupci">
+          <MToolbar/>
+          <MTable
+            cols={["Šifra","Naziv","Grad","Ulica","Br.","Poštanski","Telefon","PIB",""]}
+            rows={[
+              [<span style={{color:T.primary,fontWeight:700,fontSize:11}}>K00001</span>,"Metal d.o.o.","Beograd","Industrijska","14","11000","011/123-456","101234567",<div style={{display:"flex",gap:3}}><span style={{background:T.primaryLight,color:T.primary,border:`1px solid ${T.primaryBorder}`,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:600}}>Uredi</span><span style={{background:"none",border:`1px solid ${T.redBorder}`,color:T.red,borderRadius:4,padding:"2px 8px",fontSize:10}}>Briši</span></div>],
+              [<span style={{color:T.primary,fontWeight:700,fontSize:11}}>K00002</span>,"Tehno Export","Novi Sad","Futog. put","7b","21000","021/654-321","987654321",<div style={{display:"flex",gap:3}}><span style={{background:T.primaryLight,color:T.primary,border:`1px solid ${T.primaryBorder}`,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:600}}>Uredi</span><span style={{background:"none",border:`1px solid ${T.redBorder}`,color:T.red,borderRadius:4,padding:"2px 8px",fontSize:10}}>Briši</span></div>],
+            ]}
+          />
+        </Frame>
+
+        <H3>Pregled detalja kupca</H3>
+        <Steps items={[
+          <>Duplim klikom na red ili klikom na <strong style={{color:T.textMid}}>Pregled</strong> otvorite modal sa svim podacima.</>,
+          <>Pored adresnih podataka, prikazuje se i <strong style={{color:T.text}}>lista svih radnih naloga tog kupca</strong> (kao klikabilne oznake broja posla).</>,
+          <>Kliknite na broj posla unutar pregleda kupca da direktno otvorite taj nalog.</>,
+        ]}/>
+
+        {edit ? <>
+          <H3>Kreiranje novog kupca</H3>
+          <Steps items={[
+            <>Kliknite <strong style={{color:T.text}}>+ Novi kupac</strong> u gornjem desnom uglu kartice.</>,
+            <>Šifra se automatski generiše (sledeća slobodna u nizu).</>,
+            <>Unesite: Naziv, Grad, Ulica, Broj, Poštanski broj, Telefon, PIB.</>,
+            <>Kliknite <strong style={{color:T.text}}>Sačuvaj</strong>.</>,
+          ]}/>
+
+          <H3>Izmena podataka kupca</H3>
+          <Steps items={[
+            <>Kliknite <strong style={{color:T.primary}}>Uredi</strong> u redu kupca (ili <em>Uredi</em> dugme unutar pregleda).</>,
+            <>Izmenite željene podatke u formi.</>,
+            <>Kliknite <strong style={{color:T.text}}>Sačuvaj</strong>.</>,
+          ]}/>
+
+          <H3>Brisanje kupca</H3>
+          <Danger>Brisanje kupca je trajno i ne može se poništiti. Radni nalozi koji referenciraju tog kupca ostaju u bazi — šifra kupca ostaje upisana na nalogu ali kupac više neće biti dostupan u padajućoj listi.</Danger>
+        </> : <P>Imate pravo pregleda — možete pregledati podatke kupaca ali ne možete dodavati, menjati niti brisati kupce.</P>}
+      </>
+    );
+  }
+
+  function SObracun() { return (
+    <>
+      <P>Kartica <strong style={{color:T.text}}>💰 Obračun</strong> pruža finansijski pregled svih poslova — ukupne iznose grupisane po načinu plaćanja, interaktivni grafikon po vremenskom periodu, i sumarnu tabelu.</P>
+
+      <H3>Filter datuma unosa</H3>
+      <Frame label="Filteri datuma">
+        <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"12px 16px",display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-end",fontFamily:T.fontBody}}>
+          {["Od datuma unosa","Do datuma unosa"].map((lbl,i)=>(
+            <div key={i}>
+              <div style={{color:T.textSoft,fontSize:10,fontWeight:500,marginBottom:3}}>{lbl}</div>
+              <div style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,
+                padding:"6px 10px",fontSize:11,color:T.textSoft,width:140,fontFamily:T.fontBody}}>dd.mm.yyyy</div>
+            </div>
+          ))}
+          <div style={{background:"none",border:`1px solid ${T.border}`,borderRadius:T.radiusSm,
+            padding:"6px 12px",fontSize:11,color:T.textMid,fontFamily:T.fontBody}}>✕ Resetuj</div>
+          <div style={{fontSize:11,color:T.textSoft,fontFamily:T.fontBody}}>
+            <strong style={{color:T.text}}>34</strong> od <strong style={{color:T.text}}>120</strong> poslova
+          </div>
+        </div>
+      </Frame>
+      <Steps items={[
+        <>Unesite <strong style={{color:T.text}}>Od datuma unosa</strong> i/ili <strong style={{color:T.text}}>Do datuma unosa</strong> da ograničite period analize.</>,
+        <>Ispod filtera prikazuje se koliko poslova je uključeno od ukupnog broja u sistemu.</>,
+        <>Kliknite <strong style={{color:T.text}}>✕ Resetuj</strong> da uklonite filter i prikažete sve poslove. Dugme se pojavljuje samo kad je filter aktivan.</>,
+      ]}/>
+
+      <H3>Kartice po načinu plaćanja</H3>
+      <Frame label="Kartice — zbir po plaćanju">
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+          <MStat label="Faktura" value="8.640.000 RSD" color={T.primary} sub="12 poslova"/>
+          <MStat label="Otpremnica" value="2.100.000 RSD" color={T.amber} sub="5 poslova"/>
+          <MStat label="Zaduženje" value="960.000 RSD" color={T.purple} sub="3 poslova"/>
+        </div>
+      </Frame>
+      <P>Za svaki način plaćanja prikazuje se ukupan zbir obračuna i broj poslova u odabranom periodu. Kartice se ažuriraju u realnom vremenu prema aktivnom filteru datuma.</P>
+
+      <H3>Grafikon — Obračun po periodu</H3>
+      <Frame label="Složeni stubičasti grafikon">
+        <MBarChart/>
+      </Frame>
+      <P>Stubičasti grafikon prikazuje iznose grupisane po vremenskim periodima. Svaki stubić je složen (stacked) — boje prikazuju doprinos svakog načina plaćanja. Pređite mišem iznad stubića da vidite tooltip sa razčlanjenim iznosima:</P>
+      <Frame label="Tooltip pri prelasku mišem">
+        <MTooltip/>
+      </Frame>
+      <P>Dugmad za grupisanje X ose (iznad grafikona):</P>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,margin:"6px 0 12px"}}>
+        {[["Dan","Jedan stub po kalendarskom danu. Pogodno za kratke periode."],
+          ["Sedmica","Grupisano po ISO sedmici — oznaka je datum ponedeljka te sedmice."],
+          ["Mesec","Grupisano po mesecu — oznaka je npr. „Jan 2025". Podrazumevano."],
+          ["Ukupno","Jedan jedini stub za ceo izabrani period — brzi ukupni pregled."]
+        ].map(([k,d],i)=>(
+          <div key={i} style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"8px 11px"}}>
+            <div style={{color:T.text,fontSize:12,fontWeight:700,fontFamily:T.fontBody,marginBottom:3}}>{k}</div>
+            <div style={{color:T.textSoft,fontSize:11,fontFamily:T.fontBody,lineHeight:1.5}}>{d}</div>
+          </div>
+        ))}
+      </div>
+      <Note>Kada ima više od 10 grupa, oznake na X osi se automatski nagnu pod uglom radi čitkosti.</Note>
+
+      <H3>Sumarnu tabela</H3>
+      <Frame label="Sumarnu tabela po plaćanjima">
+        <div style={{overflowX:"auto",borderRadius:T.radiusSm,border:`1px solid ${T.border}`}}>
+          <table style={{width:"100%",borderCollapse:"collapse",background:T.surface,fontSize:11,fontFamily:T.fontBody}}>
+            <thead><tr>{["Plaćanje","Broj poslova","Ukupan obračun"].map((h,i)=>(
+              <th key={i} style={{padding:"6px 12px",textAlign:"left",color:T.textSoft,fontSize:9,textTransform:"uppercase",letterSpacing:".07em",fontWeight:700,borderBottom:`1px solid ${T.border}`,background:"#1C2330"}}>{h}</th>
+            ))}</tr></thead>
+            <tbody>
+              {[["Faktura",T.primary,12,"8.640.000"],["Otpremnica",T.amber,5,"2.100.000"],["Zaduženje",T.purple,3,"960.000"]].map(([t,c,n,s],i)=>(
+                <tr key={i} style={{background:i%2===0?T.surface:T.surfaceHover}}>
+                  <td style={{padding:"6px 12px",borderBottom:`1px solid ${T.border}`}}><MBadge color={c}>{t}</MBadge></td>
+                  <td style={{padding:"6px 12px",borderBottom:`1px solid ${T.border}`,color:T.textMid}}>{n}</td>
+                  <td style={{padding:"6px 12px",borderBottom:`1px solid ${T.border}`,color:T.green,fontWeight:600}}>{s} RSD</td>
+                </tr>
+              ))}
+              <tr style={{background:T.surfaceRaised,borderTop:`2px solid ${T.border}`}}>
+                <td style={{padding:"7px 12px",color:T.text,fontWeight:700,fontSize:12,fontFamily:T.fontBody}}>UKUPNO</td>
+                <td style={{padding:"7px 12px",color:T.textMid,fontWeight:700,fontSize:12,fontFamily:T.fontBody}}>20</td>
+                <td style={{padding:"7px 12px",color:T.primary,fontWeight:800,fontSize:13,fontFamily:T.fontHead}}>11.700.000 RSD</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Frame>
+      <P>Tabela ispod grafikona prikazuje sumarni pregled po plaćanjima sa redom <strong style={{color:T.text}}>UKUPNO</strong> koji sabira sve kategorije. Vrednosti prate aktivan filter datuma.</P>
+    </>
+  ); }
+
+  function SKorisnici() { return (
+    <>
+      <P>Kartica <strong style={{color:T.text}}>👥 Korisnici</strong> dostupna je samo administratorima. Ovde se pregledaju i uređuju dozvole za sve korisnike sistema.</P>
+      <Warn>Novi korisnici se <strong>ne kreiraju ovde</strong>. Kreiraju se isključivo kroz <strong>Supabase → Authentication → Add user</strong> (email + lozinka). Nakon kreiranja, profil se automatski pojavljuje u ovoj listi.</Warn>
+
+      <H3>Tabela korisnika</H3>
+      <Frame label="Tabela korisnika sa dozvolama">
+        <MToolbar/>
+        <MTable
+          cols={["Ime","Prezime","Telefon","Adresa","Rola","Obj. rasporede","Kartice",""]}
+          rows={[
+            ["Ana","Nikolić","011/111-222","Beograd",<MBadge color={T.primary}>Admin</MBadge>,<MBadge color={T.green}>✓ Da</MBadge>,<div style={{display:"flex",gap:3,flexWrap:"wrap"}}><MBadge color={T.green}>Sve</MBadge></div>,<span style={{background:T.primaryLight,color:T.primary,border:`1px solid ${T.primaryBorder}`,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:600}}>Uredi dozvole</span>],
+            ["Petar","Petrović","021/222-333","Novi Sad",<MBadge color={T.textMid}>Korisnik</MBadge>,"—",<div style={{display:"flex",gap:3,flexWrap:"wrap"}}><MBadge color={T.green}>Aktivni</MBadge><MBadge color={T.amber}>Radionica</MBadge></div>,<span style={{background:T.primaryLight,color:T.primary,border:`1px solid ${T.primaryBorder}`,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:600}}>Uredi dozvole</span>],
+          ]}
+        />
+      </Frame>
+      <P>Kolona <strong style={{color:T.text}}>Obj. rasporede</strong> pokazuje da li korisnik ima pravo da objavljuje zajedničke rasporede kolona. Kolona <strong style={{color:T.text}}>Kartice</strong> prikazuje spisak kartica kojima korisnik ima pristup.</P>
+
+      <H3>Uređivanje dozvola korisnika</H3>
+      <Steps items={[
+        <>Kliknite <strong style={{color:T.primary}}>Uredi dozvole</strong> u redu korisnika koji želite urediti.</>,
+        <>U formi možete izmeniti osnovne podatke: <strong style={{color:T.text}}>Ime, Prezime, Telefon, Adresa</strong>.</>,
+        <>Za svaku karticu postavite nivo dozvole klikom na radio-dugme.</>,
+        <>Opciono: označite <strong style={{color:T.purple}}>🌐 Može da objavljuje zajedničke rasporede kolona</strong> ako korisniku treba ta mogućnost.</>,
+        <>Kliknite <strong style={{color:T.text}}>Sačuvaj</strong>. Izmene stupaju na snagu odmah — korisnik će ih videti pri sledećem učitavanju stranice.</>,
+      ]}/>
+
+      <H3>Nivoi dozvola po kartici</H3>
+      <Frame label="Primer tabele dozvola">
+        <MPermTable/>
+      </Frame>
+      <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}>
+        {[
+          ["Nema",T.red,T.redBg,T.redBorder,"Kartica nije vidljiva korisniku — ne pojavljuje se u navigaciji."],
+          ["Pregledaj",T.amber,T.amberBg,T.amberBorder,"Kartica je vidljiva. Podaci se mogu čitati. Ništa se ne može menjati."],
+          ["Uredi",T.green,T.greenBg,T.greenBorder,"Pun pristup — kreiranje, izmena, brisanje, kopiranje, inline promene statusa."],
+        ].map(([lbl,c,bg,bdr,desc],i)=>(
+          <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",background:bg,
+            border:`1px solid ${bdr}`,borderRadius:T.radiusSm,padding:"7px 12px"}}>
+            <div style={{color:c,fontWeight:700,fontSize:12,fontFamily:T.fontBody,flexShrink:0,minWidth:70}}>{lbl}</div>
+            <div style={{color:T.textMid,fontSize:12,fontFamily:T.fontBody,lineHeight:1.5}}>{desc}</div>
+          </div>
+        ))}
+      </div>
+      <Note color={T.purple}>Admini automatski imaju pun pristup svim karticama i mogu da objavljuju zajedničke rasporede — bez obzira na postavke dozvola.</Note>
+
+      <H3>Napomene za administratore</H3>
+      <div style={{border:`1px solid ${T.border}`,borderRadius:T.radiusSm,overflow:"hidden"}}>
+        {[["Kreiranje korisnika","Obavezno kroz Supabase → Authentication → Add user. Nije moguće iz aplikacije."],
+          ["Brisanje korisnika","Obavezno kroz Supabase → Authentication. Nije moguće iz aplikacije."],
+          ["Resetovanje lozinke","Isključivo kroz Supabase Authentication ili Supabase Reset Password funkciju."],
+          ["Postavljanje admin statusa","Direktno u Supabase tabeli profiles (polje is_admin = true) — nije dostupno iz forme."],
+        ].map(([n,d],i)=>(
+          <div key={i} style={{display:"grid",gridTemplateColumns:"200px 1fr",borderBottom:i<3?`1px solid ${T.border}`:"none",
+            background:i%2===0?T.surface:T.surfaceHover}}>
+            <div style={{padding:"7px 12px",color:T.text,fontSize:12,fontWeight:600,fontFamily:T.fontBody,borderRight:`1px solid ${T.border}`}}>{n}</div>
+            <div style={{padding:"7px 12px",color:T.textSoft,fontSize:12,fontFamily:T.fontBody,lineHeight:1.5}}>{d}</div>
+          </div>
+        ))}
+      </div>
+    </>
+  ); }
+
+  const renderContent = id => {
+    switch(id) {
+      case "opste":     return <SOpste/>;
+      case "kolone":    return <SKolone/>;
+      case "poslovi":   return <SPoslovi/>;
+      case "aktivni":   return <SAktivni/>;
+      case "zavrseni":  return <SZavrseni/>;
+      case "radionica": return <SRadionica/>;
+      case "montaza":   return <SMontaza/>;
+      case "isporuka":  return <SIsporuka/>;
+      case "knjizenje": return <SKnjizenje/>;
+      case "kupci":     return <SKupci/>;
+      case "obracun":   return <SObracun/>;
+      case "korisnici": return <SKorisnici/>;
+      default: return null;
+    }
+  };
+
+  return (
+    <div style={{display:"flex",minHeight:"calc(100vh - 52px)"}}>
+
+      {/* ── Sidebar ─────────────────────────────────────────────── */}
+      <div style={{
+        width:230, flexShrink:0,
+        borderRight:`1px solid ${T.border}`,
+        background:T.surface,
+        position:"sticky", top:52,
+        height:"calc(100vh - 52px)",
+        overflowY:"auto",
+        padding:"18px 0",
+      }}>
+        <div style={{padding:"0 16px 10px",
+          color:T.textSoft,fontSize:9,fontWeight:700,
+          textTransform:"uppercase",letterSpacing:".09em",fontFamily:T.fontBody}}>
+          Sadržaj uputstva
+        </div>
+        {SECTIONS.map(s=>(
+          <button key={s.id} onClick={()=>scrollTo(s.id)} style={{
+            display:"block",width:"100%",textAlign:"left",
+            background:activeId===s.id?T.primaryLight:"none",
+            borderLeft:`3px solid ${activeId===s.id?T.primary:"transparent"}`,
+            border:"none",
+            color:activeId===s.id?T.primary:T.textMid,
+            padding:"8px 16px",cursor:"pointer",
+            fontSize:12,fontFamily:T.fontBody,
+            fontWeight:activeId===s.id?600:400,
+            lineHeight:1.4,
+            transition:"all 0.12s",
+          }}>
+            {s.title}
+          </button>
+        ))}
+        <div style={{padding:"14px 16px 0",marginTop:8,borderTop:`1px solid ${T.border}`,
+          color:T.textSoft,fontSize:10,fontFamily:T.fontBody,lineHeight:1.5}}>
+          {isAdmin ? "Prikazane sve sekcije" : `${SECTIONS.length} sekcija na osnovu vaših dozvola`}
+        </div>
+      </div>
+
+      {/* ── Content ─────────────────────────────────────────────── */}
+      <div ref={contentRef} style={{
+        flex:1, overflowY:"auto",
+        height:"calc(100vh - 52px)",
+        padding:"36px 44px",
+        maxWidth:880,
+      }}>
+
+        {/* Hero */}
+        <div style={{marginBottom:40,paddingBottom:32,borderBottom:`2px solid ${T.border}`}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:7,
+            background:T.primaryLight,border:`1px solid ${T.primaryBorder}`,
+            borderRadius:T.radiusSm,padding:"3px 12px",marginBottom:14}}>
+            <div style={{width:5,height:5,background:T.primary,borderRadius:"50%"}}/>
+            <span style={{color:T.primary,fontSize:10,fontWeight:700,
+              letterSpacing:".07em",textTransform:"uppercase",fontFamily:T.fontBody}}>
+              Korisnički priručnik
+            </span>
+          </div>
+          <h1 style={{fontFamily:T.fontHead,fontSize:32,fontWeight:800,
+            color:T.text,letterSpacing:"-0.04em",lineHeight:1.1,
+            margin:"0 0 12px"}}>
+            Uputstvo za korišćenje
+          </h1>
+          <p style={{color:T.textMid,fontSize:13,lineHeight:1.8,maxWidth:560,
+            margin:"0 0 16px",fontFamily:T.fontBody}}>
+            Kompletno uputstvo za aplikaciju <strong style={{color:T.text}}>Poslovi</strong>.
+            Prikazane su samo sekcije kojima imate pristup — sadržaj se automatski prilagođava vašim dozvolama.
+          </p>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+            {SECTIONS.filter(s=>s.tab).map(s=>{
+              const lvl = isAdmin?"edit":canEditTab(s.tab)?"edit":"view";
+              const c = lvl==="edit"?T.green:T.amber;
+              const bg= lvl==="edit"?T.greenBg:T.amberBg;
+              const bd= lvl==="edit"?T.greenBorder:T.amberBorder;
+              return (
+                <span key={s.id} style={{background:bg,color:c,border:`1px solid ${bd}`,
+                  borderRadius:4,padding:"2px 9px",fontSize:10,fontWeight:600,fontFamily:T.fontBody}}>
+                  {s.title} — {lvl==="edit"?"Uredi":"Pregled"}
+                </span>
+              );
+            })}
+            {isAdmin && <span style={{background:T.primaryLight,color:T.primary,border:`1px solid ${T.primaryBorder}`,borderRadius:4,padding:"2px 9px",fontSize:10,fontWeight:600,fontFamily:T.fontBody}}>★ Admin — pun pristup</span>}
+          </div>
+        </div>
+
+        {/* Section blocks */}
+        {SECTIONS.map((s, idx) => (
+          <Sec key={s.id} id={s.id}>
+            <H2>{s.title}</H2>
+            {renderContent(s.id)}
+            {idx < SECTIONS.length-1 && (
+              <div style={{borderBottom:`1px solid ${T.border}`,marginTop:44}}/>
+            )}
+          </Sec>
+        ))}
+
+        <div style={{marginTop:24,paddingTop:20,borderTop:`1px solid ${T.border}`,
+          color:T.textSoft,fontSize:11,textAlign:"center",fontFamily:T.fontBody,lineHeight:1.6}}>
+          Poslovi App · Korisnički priručnik · Sadržaj prilagođen vašim dozvolama
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function App() {
   const [authUser,setAuthUser]       = useState(null);
@@ -1205,7 +2460,7 @@ export default function App() {
   const knjigenjeRows = useMemo(()=>poslovi.filter(p=>p.ZavrsenPosao&&p.Placanje==="Faktura"),[poslovi]);
 
   const perm    = tab => profile?.tab_permissions?.[tab]||"none";
-  const canSee  = tab => perm(tab)!=="none";
+  const canSee  = tab => tab==="uputstvo" || perm(tab)!=="none";
   const canEdit = tab => perm(tab)==="edit";
   const tf = k => v => setTempData(d=>({...d,[k]:v}));
 
@@ -1489,6 +2744,12 @@ export default function App() {
         {view==="kupci" && <KupciView kupci={kupci} canEdit={canEdit("kupci")} onNew={openNewKupac} onEdit={openEditKupac} onDelete={id=>setConfirmDelete({type:"kupac",id})} onView={setViewingKupac} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>}
 
         {view==="obracun" && <ObracunView poslovi={poslovi} placanjeColor={placanjeColor}/>}
+
+        {view==="uputstvo" && (
+          <div style={{margin:"-22px -20px"}}>
+            <ManualView profile={profile} canEdit={canEdit}/>
+          </div>
+        )}
 
         {view==="korisnici" && <>
           <PageHeader title="Korisnici"/>
