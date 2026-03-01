@@ -75,6 +75,7 @@ const ALL_TABS = [
   { key:"obracun",   label:"Obračun",          icon:"💰" },
   { key:"korisnici", label:"Korisnici",        icon:"👥" },
   { key:"uputstvo",  label:"Uputstvo",         icon:"📖" },
+  { key:"changelog", label:"Istorija izmena",  icon:"🕓" },
 ];
 
 const montazaIsporukaOptions = ["Samo isporuka","Montaža i isporuka","Lično preuzimanje"];
@@ -1127,6 +1128,258 @@ function ObracunView({poslovi, placanjeColor}) {
 }
 
 // ── UPUTSTVO (Manual) ────────────────────────────────────────────────────────
+// ── ChangelogView ─────────────────────────────────────────────────────────────
+function ChangelogView() {
+  const [logs, setLogs]         = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [search, setSearch]     = useState("");
+  const [filterAction, setFilterAction] = useState("sve");
+  const [filterEntity, setFilterEntity] = useState("sve");
+  const [filterActor, setFilterActor]   = useState("sve");
+  const [page, setPage]         = useState(0);
+  const PAGE = 50;
+
+  useEffect(() => {
+    setLoading(true);
+    sb.from("change_log")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(2000)
+      .then(({ data }) => { setLogs(data || []); setLoading(false); });
+  }, []);
+
+  const actors   = useMemo(() => [...new Set(logs.map(l=>l.actor))].sort(), [logs]);
+  const entities = useMemo(() => [...new Set(logs.map(l=>l.entity_type))].sort(), [logs]);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return logs.filter(l => {
+      if (filterAction !== "sve" && l.action !== filterAction) return false;
+      if (filterEntity !== "sve" && l.entity_type !== filterEntity) return false;
+      if (filterActor  !== "sve" && l.actor !== filterActor) return false;
+      if (!q) return true;
+      return [l.actor, l.entity_label, l.field_label, l.old_value, l.new_value, l.action]
+        .some(v => (v||"").toLowerCase().includes(q));
+    });
+  }, [logs, search, filterAction, filterEntity, filterActor]);
+
+  const paged = filtered.slice(page * PAGE, (page + 1) * PAGE);
+  const totalPages = Math.ceil(filtered.length / PAGE);
+
+  function resetFilters() { setSearch(""); setFilterAction("sve"); setFilterEntity("sve"); setFilterActor("sve"); setPage(0); }
+
+  const actionMeta = {
+    create: { label:"Kreiranje", color:T.green,  bg:T.greenBg,  border:T.greenBorder,  icon:"✚" },
+    update: { label:"Izmena",    color:T.primary, bg:T.primaryLight, border:T.primaryBorder, icon:"✎" },
+    delete: { label:"Brisanje",  color:T.red,     bg:T.redBg,    border:T.redBorder,    icon:"✕" },
+  };
+  const entityLabel = { posao:"Posao", kupac:"Kupac", korisnik:"Korisnik" };
+
+  function fmtDateTime(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    const pad = n => String(n).padStart(2,"0");
+    return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()}  ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  const selStyle = {
+    background:T.surfaceRaised, border:`1px solid ${T.border}`, borderRadius:T.radiusSm,
+    color:T.textMid, fontSize:12, padding:"6px 10px", fontFamily:T.fontBody,
+    cursor:"pointer", outline:"none", colorScheme:"dark",
+  };
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18,gap:12,flexWrap:"wrap"}}>
+        <div>
+          <h1 style={{fontFamily:T.fontHead,fontSize:22,fontWeight:800,color:T.text,
+            letterSpacing:"-0.03em",margin:"0 0 4px"}}>🕓 Istorija izmena</h1>
+          <p style={{color:T.textSoft,fontSize:12,margin:0,fontFamily:T.fontBody}}>
+            Sve promene: kreiranje, izmene i brisanje zapisa sa starim i novim vrednostima
+          </p>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,
+            padding:"4px 12px",fontSize:12,color:T.textMid,fontFamily:T.fontBody}}>
+            {filtered.length.toLocaleString()} {filtered.length===1?"zapis":"zapisa"}
+          </span>
+          <button onClick={()=>{setLoading(true);sb.from("change_log").select("*").order("created_at",{ascending:false}).limit(2000).then(({data})=>{setLogs(data||[]);setLoading(false);});}}
+            style={{background:T.primaryLight,border:`1px solid ${T.primaryBorder}`,color:T.primary,
+              borderRadius:T.radiusSm,padding:"5px 12px",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:T.fontBody}}>
+            ↻ Osveži
+          </button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+        {/* Search */}
+        <div style={{position:"relative",flex:"1 1 220px",minWidth:180}}>
+          <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",fontSize:13,pointerEvents:"none"}}>🔍</span>
+          <input
+            value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}
+            onKeyDown={e=>{if(e.key==="Escape"){setSearch("");setPage(0);}}}
+            placeholder="Pretraži..." style={{...selStyle,width:"100%",paddingLeft:30,
+              border:`1px solid ${search?T.primary:T.border}`,color:T.text,boxSizing:"border-box"}}/>
+          {search && <button onClick={()=>{setSearch("");setPage(0);}} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:T.textSoft,cursor:"pointer",fontSize:14,lineHeight:1}}>×</button>}
+        </div>
+        <select value={filterAction} onChange={e=>{setFilterAction(e.target.value);setPage(0);}} style={selStyle}>
+          <option value="sve">Sve akcije</option>
+          <option value="create">Kreiranje</option>
+          <option value="update">Izmena</option>
+          <option value="delete">Brisanje</option>
+        </select>
+        <select value={filterEntity} onChange={e=>{setFilterEntity(e.target.value);setPage(0);}} style={selStyle}>
+          <option value="sve">Svi entiteti</option>
+          {entities.map(e=><option key={e} value={e}>{entityLabel[e]||e}</option>)}
+        </select>
+        <select value={filterActor} onChange={e=>{setFilterActor(e.target.value);setPage(0);}} style={selStyle}>
+          <option value="sve">Svi korisnici</option>
+          {actors.map(a=><option key={a} value={a}>{a}</option>)}
+        </select>
+        {(search||filterAction!=="sve"||filterEntity!=="sve"||filterActor!=="sve") && (
+          <button onClick={resetFilters} style={{background:"none",border:`1px solid ${T.border}`,
+            color:T.textMid,borderRadius:T.radiusSm,padding:"6px 12px",cursor:"pointer",
+            fontSize:12,fontFamily:T.fontBody}}>✕ Resetuj</button>
+        )}
+      </div>
+
+      {/* Summary chips */}
+      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+        {Object.entries(actionMeta).map(([k,m])=>{
+          const cnt = filtered.filter(l=>l.action===k).length;
+          if (!cnt) return null;
+          return (
+            <button key={k} onClick={()=>{setFilterAction(filterAction===k?"sve":k);setPage(0);}}
+              style={{background:filterAction===k?m.bg:"none",border:`1px solid ${filterAction===k?m.border:T.border}`,
+                color:filterAction===k?m.color:T.textSoft,borderRadius:T.radiusSm,
+                padding:"3px 10px",cursor:"pointer",fontSize:11,fontWeight:600,fontFamily:T.fontBody}}>
+              {m.icon} {m.label} {cnt}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Table */}
+      {loading ? (
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:60,color:T.textSoft,fontFamily:T.fontBody,gap:12}}>
+          <div style={{width:24,height:24,border:`3px solid ${T.border}`,borderTopColor:T.primary,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+          Učitavanje...
+        </div>
+      ) : filtered.length === 0 ? (
+        <div style={{textAlign:"center",padding:"60px 20px",color:T.textSoft,fontFamily:T.fontBody,fontSize:13}}>
+          <div style={{fontSize:36,marginBottom:12}}>🕓</div>
+          Nema zapisa koji odgovaraju filteru
+        </div>
+      ) : (
+        <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`}}>
+          <table style={{width:"100%",borderCollapse:"collapse",background:T.surface,fontFamily:T.fontBody}}>
+            <thead>
+              <tr>
+                {["Datum i vreme","Korisnik","Akcija","Entitet","Zapis","Polje","Prethodna vrednost","Nova vrednost"].map(h=>(
+                  <th key={h} style={{padding:"9px 12px",textAlign:"left",color:T.textSoft,fontSize:10,
+                    textTransform:"uppercase",letterSpacing:"0.07em",fontWeight:700,
+                    borderBottom:`1px solid ${T.border}`,background:"#1C2330",whiteSpace:"nowrap"}}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {paged.map((log, i) => {
+                const m = actionMeta[log.action] || actionMeta.update;
+                return (
+                  <tr key={log.id||i}
+                    style={{background:i%2===0?T.surface:T.surfaceHover}}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight}
+                    onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover}>
+                    {/* DateTime */}
+                    <td style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
+                      <span style={{fontFamily:"monospace",fontSize:11,color:T.textMid}}>{fmtDateTime(log.created_at)}</span>
+                    </td>
+                    {/* Actor */}
+                    <td style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{width:22,height:22,borderRadius:"50%",background:T.primaryLight,
+                          border:`1.5px solid ${T.primaryBorder}`,display:"flex",alignItems:"center",
+                          justifyContent:"center",fontSize:8,fontWeight:700,color:T.primary,flexShrink:0}}>
+                          {(log.actor||"?").split(" ").map(w=>w[0]||"").join("").slice(0,2).toUpperCase()}
+                        </div>
+                        <span style={{fontSize:12,color:T.text,fontWeight:500}}>{log.actor||"—"}</span>
+                      </div>
+                    </td>
+                    {/* Action */}
+                    <td style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
+                      <span style={{background:m.bg,color:m.color,border:`1px solid ${m.border}`,
+                        borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:700}}>
+                        {m.icon} {m.label}
+                      </span>
+                    </td>
+                    {/* Entity type */}
+                    <td style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
+                      <span style={{color:T.textMid,fontSize:12}}>{entityLabel[log.entity_type]||log.entity_type}</span>
+                    </td>
+                    {/* Entity label */}
+                    <td style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
+                      <span style={{color:T.primary,fontWeight:700,fontSize:12}}>{log.entity_label||"—"}</span>
+                    </td>
+                    {/* Field */}
+                    <td style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
+                      <span style={{color:log.field_label?T.text:T.textSoft,fontSize:12,fontWeight:log.field_label?500:400}}>
+                        {log.field_label||<span style={{fontStyle:"italic",color:T.textSoft}}>ceo zapis</span>}
+                      </span>
+                    </td>
+                    {/* Old value */}
+                    <td style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,maxWidth:200}}>
+                      {log.old_value != null
+                        ? <span style={{background:T.redBg,border:`1px solid ${T.redBorder}`,color:T.red,
+                            borderRadius:4,padding:"2px 8px",fontSize:11,display:"inline-block",
+                            maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}
+                            title={log.old_value}>
+                            {log.old_value}
+                          </span>
+                        : <span style={{color:T.textSoft,fontSize:11,fontStyle:"italic"}}>—</span>}
+                    </td>
+                    {/* New value */}
+                    <td style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,maxWidth:200}}>
+                      {log.new_value != null
+                        ? <span style={{background:T.greenBg,border:`1px solid ${T.greenBorder}`,color:T.green,
+                            borderRadius:4,padding:"2px 8px",fontSize:11,display:"inline-block",
+                            maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}
+                            title={log.new_value}>
+                            {log.new_value}
+                          </span>
+                        : <span style={{color:T.textSoft,fontSize:11,fontStyle:"italic"}}>—</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8,marginTop:16,fontFamily:T.fontBody}}>
+          <button onClick={()=>setPage(p=>Math.max(0,p-1))} disabled={page===0}
+            style={{background:"none",border:`1px solid ${T.border}`,color:page===0?T.textSoft:T.textMid,
+              borderRadius:T.radiusSm,padding:"5px 14px",cursor:page===0?"default":"pointer",
+              fontSize:12,opacity:page===0?0.5:1}}>← Prethodna</button>
+          <span style={{color:T.textMid,fontSize:12}}>
+            Strana {page+1} od {totalPages} &nbsp;·&nbsp; {filtered.length} zapisa
+          </span>
+          <button onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))} disabled={page===totalPages-1}
+            style={{background:"none",border:`1px solid ${T.border}`,color:page===totalPages-1?T.textSoft:T.textMid,
+              borderRadius:T.radiusSm,padding:"5px 14px",cursor:page===totalPages-1?"default":"pointer",
+              fontSize:12,opacity:page===totalPages-1?0.5:1}}>Sledeća →</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ManualView({ profile }) {
   const [activeId, setActiveId] = useState("opste");
   const contentRef = useRef(null);
@@ -1710,7 +1963,7 @@ function ManualView({ profile }) {
       <Frame label="Dijalog za čuvanje rasporeda"><MSaveDialog/></Frame>
       <Steps items={[
         <>Podesite kolone po želji, zatim kliknite <strong style={{color:T.text}}>Sačuvaj raspored</strong> na dnu menija.</>,
-        <>Unesite naziv rasporeda (npr. <em>„Kompaktni pregled"</em>).</>,
+        <>Unesite naziv rasporeda (npr. <em>'Kompaktni pregled"</em>).</>,
         <>Opciono označite <strong style={{color:T.amber}}>★ Postavi kao podrazumevani</strong> — ovaj raspored će se automatski učitati pri svakom sledećem otvaranju aplikacije.</>,
         (profile?.can_publish_layouts||isAdmin) && <>Opciono označite <strong style={{color:T.primary}}>🌐 Objavi kao zajednički raspored</strong> — raspored postaje vidljiv svim korisnicima.</>,
         <>Kliknite <strong style={{color:T.text}}>Sačuvaj</strong>. Raspored se pojavljuje u meniju ⚙ Kolone.</>,
@@ -1820,7 +2073,7 @@ function ManualView({ profile }) {
           <Warn>Statusi izrade, isporuke, montaže i fakturisanja prikazani su u formi samo informativno i ne mogu se menjati odavde. Menjaju se isključivo direktnim klikom u karticama Radionica, Isporuka, Montaža i Knjiženje.</Warn>
 
           <H3>Kopiranje posla (⧉)</H3>
-          <P>Svaki red u tabeli ima dugme <strong style={{color:T.text}}>⧉</strong> između „Uredi" i „Briši". Klikom na njega otvara se popunjena forma za novi posao sa sledećim automatskim promenama:</P>
+          <P>Svaki red u tabeli ima dugme <strong style={{color:T.text}}>⧉</strong> između 'Uredi" i 'Briši". Klikom na njega otvara se popunjena forma za novi posao sa sledećim automatskim promenama:</P>
           <div style={{border:`1px solid ${T.border}`,borderRadius:T.radiusSm,overflow:"hidden",marginBottom:10}}>
             {[["Broj posla","Sledeći slobodan broj u nizu (automatski)","green"],
               ["Datum unosa","Današnji datum","green"],
@@ -1874,7 +2127,7 @@ function ManualView({ profile }) {
           <H3>Kreiranje novog posla</H3>
           <P>Kliknite <strong style={{color:T.text}}>+ Novi posao</strong> u gornjem desnom uglu. Detaljna uputstva za popunjavanje forme naći ćete u sekciji <strong style={{color:T.primary}}>📋 Svi poslovi</strong> ovog uputstva.</P>
 
-          <H3>Inline promena statusa „Završen"</H3>
+          <H3>Inline promena statusa 'Završen"</H3>
           <P>U koloni <strong style={{color:T.text}}>Završen</strong> možete direktno kliknuti na kvačicu — bez otvaranja forme:</P>
           <Frame label="Direktna promena statusa Završen u tabeli">
             <div style={{display:"flex",alignItems:"center",gap:16,padding:"4px 0",fontFamily:T.fontBody,flexWrap:"wrap"}}>
@@ -2018,7 +2271,7 @@ function ManualView({ profile }) {
     return (
       <>
         <P>Kartica <strong style={{color:T.text}}>📒 Knjiženje</strong> prikazuje završene poslove sa načinom plaćanja <strong style={{color:T.primary}}>Faktura</strong>. Ovde se evidentira da li je svaka faktura proknjižena u računovodstvenom sistemu.</P>
-        <Note>U ovoj kartici prikazuju se <strong>isključivo</strong> završeni poslovi sa plaćanjem „Faktura". Otpremnice i zaduženja ovde nisu vidljivi.</Note>
+        <Note>U ovoj kartici prikazuju se <strong>isključivo</strong> završeni poslovi sa plaćanjem 'Faktura". Otpremnice i zaduženja ovde nisu vidljivi.</Note>
 
         <H3>Statistike knjiženja</H3>
         <Frame label="Kartice sa statistikama knjiženja">
@@ -2460,7 +2713,7 @@ export default function App() {
   const knjigenjeRows = useMemo(()=>poslovi.filter(p=>p.ZavrsenPosao&&p.Placanje==="Faktura"),[poslovi]);
 
   const perm    = tab => profile?.tab_permissions?.[tab]||"none";
-  const canSee  = tab => tab==="uputstvo" || perm(tab)!=="none";
+  const canSee  = tab => tab==="uputstvo" || (tab==="changelog" && profile?.is_admin) || perm(tab)!=="none";
   const canEdit = tab => perm(tab)==="edit";
   const tf = k => v => setTempData(d=>({...d,[k]:v}));
 
@@ -2468,9 +2721,67 @@ export default function App() {
     const fieldMap = { StatusIzrade:"status_izrade", StatusIsporuke:"status_isporuke", StatusMontaze:"status_montaze", Fakturisano:"fakturisano", ZavrsenPosao:"zavrsen_posao" };
     const dbField = fieldMap[appField];
     if (!dbField) return;
+    const oldPosao = poslovi.find(p=>p.id===id);
+    const oldValue = oldPosao?.[appField];
     setPoslovi(ps=>ps.map(p=>p.id===id?{...p,[appField]:value}:p));
     const {error} = await sb.from("poslovi").update({[dbField]:value}).eq("id",id);
-    if (error) { setGlobalErr("Greška: "+error.message); loadPoslovi(); }
+    if (error) { setGlobalErr("Greška: "+error.message); loadPoslovi(); return; }
+    await writeLog([{
+      entity_type:"posao", entity_id:id,
+      entity_label:oldPosao?.Posao||id,
+      action:"update",
+      field_name:appField,
+      field_label:INLINE_LABELS[appField]||appField,
+      old_value:oldValue, new_value:value,
+    }]);
+  }
+
+  // ── Changelog helpers ────────────────────────────────────────────────────────
+  const POSAO_LABELS = {
+    Posao:"Broj posla", KLIJENT:"Klijent", SifraKupca:"Šifra kupca",
+    DatumUnosa:"Datum unosa", RokZaIsporuku:"Rok za isporuku", Unosilac:"Unosilac",
+    Opis:"Opis", PoslatiNaIzradu:"Poslati na izradu", MontazaIsporuka:"Montaža/Isporuka",
+    Placanje:"Plaćanje", StatusIzrade:"Status izrade", StatusIsporuke:"Status isporuke",
+    StatusMontaze:"Status montaže", SpecifikacijaCene:"Specifikacija cene",
+    Obracun:"Obračun (RSD)", ZavrsenPosao:"Završen posao", Fakturisano:"Fakturisano",
+  };
+  const KUPAC_LABELS = {
+    Naziv:"Naziv", Grad:"Grad", Ulica:"Ulica", Broj:"Broj", PostanskiBroj:"Poštanski broj",
+    Telefon:"Telefon", PIB:"PIB",
+  };
+  const USER_LABELS = {
+    ime:"Ime", prezime:"Prezime", telefon:"Telefon", adresa:"Adresa",
+    tab_permissions:"Dozvole", can_publish_layouts:"Objavljuje rasporede",
+  };
+  const INLINE_LABELS = {
+    StatusIzrade:"Status izrade", StatusIsporuke:"Status isporuke",
+    StatusMontaze:"Status montaže", Fakturisano:"Fakturisano", ZavrsenPosao:"Završen posao",
+  };
+
+  function fmtVal(v) {
+    if (v === null || v === undefined || v === "") return "—";
+    if (v === true)  return "Da";
+    if (v === false) return "Ne";
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  }
+
+  async function writeLog(entries) {
+    // entries: [{ entity_type, entity_id, entity_label, action, field_name, field_label, old_value, new_value }]
+    const actor = profile ? `${profile.ime||""} ${profile.prezime||""}`.trim() : "—";
+    const rows = entries.map(e => ({
+      actor,
+      entity_type:  e.entity_type,
+      entity_id:    e.entity_id,
+      entity_label: e.entity_label,
+      action:       e.action,           // 'create' | 'update' | 'delete'
+      field_name:   e.field_name||null,
+      field_label:  e.field_label||null,
+      old_value:    e.old_value!=null ? fmtVal(e.old_value) : null,
+      new_value:    e.new_value!=null ? fmtVal(e.new_value) : null,
+      created_at:   new Date().toISOString(),
+    }));
+    await sb.from("change_log").insert(rows);
   }
 
   function openEditPosao(p) { setEditingPosao(p.id); setTempData({...p}); setTempErrors({}); }
@@ -2504,16 +2815,54 @@ export default function App() {
   async function savePosao() {
     setSaving(true);
     const row = appToDB(tempData);
-    let error;
-    if (newPosao) { ({error} = await sb.from("poslovi").insert([row])); }
-    else          { ({error} = await sb.from("poslovi").update(row).eq("id",editingPosao)); }
+    let error, data;
+    if (newPosao) {
+      ({error, data} = await sb.from("poslovi").insert([row]).select().single());
+      if (!error) {
+        const entries = Object.entries(POSAO_LABELS)
+          .filter(([k]) => k !== "Posao" && tempData[k] !== undefined && tempData[k] !== "" && tempData[k] !== false && tempData[k] !== null)
+          .map(([k,lbl]) => ({
+            entity_type:"posao", entity_id:data?.id||"new",
+            entity_label:tempData.Posao, action:"create",
+            field_name:k, field_label:lbl,
+            old_value:null, new_value:tempData[k],
+          }));
+        if (entries.length) await writeLog(entries);
+      }
+    } else {
+      const prev = poslovi.find(p=>p.id===editingPosao);
+      ({error} = await sb.from("poslovi").update(row).eq("id",editingPosao));
+      if (!error && prev) {
+        const changed = Object.entries(POSAO_LABELS)
+          .filter(([k]) => {
+            const a = fmtVal(prev[k]);
+            const b = fmtVal(tempData[k]);
+            return a !== b;
+          })
+          .map(([k,lbl]) => ({
+            entity_type:"posao", entity_id:editingPosao,
+            entity_label:prev.Posao, action:"update",
+            field_name:k, field_label:lbl,
+            old_value:prev[k], new_value:tempData[k],
+          }));
+        if (changed.length) await writeLog(changed);
+      }
+    }
     setSaving(false);
     if (error) { setGlobalErr("Greška: "+error.message); return; }
     await loadPoslovi(); closeModal();
   }
   async function deletePosao(id) {
+    const posao = poslovi.find(p=>p.id===id);
     const {error} = await sb.from("poslovi").delete().eq("id",id);
     if (error) { setGlobalErr("Greška: "+error.message); return; }
+    await writeLog([{
+      entity_type:"posao", entity_id:id,
+      entity_label:posao?.Posao||id,
+      action:"delete",
+      field_name:null, field_label:null,
+      old_value:posao?.Posao||id, new_value:null,
+    }]);
     setPoslovi(ps=>ps.filter(p=>p.id!==id)); setConfirmDelete(null);
   }
 
@@ -2529,16 +2878,50 @@ export default function App() {
   async function saveKupac() {
     setSaving(true);
     const row = appKupacToDB(tempData);
-    let error;
-    if (newKupac) { ({error} = await sb.from("kupci").insert([row])); }
-    else          { ({error} = await sb.from("kupci").update(row).eq("id",editingKupac)); }
+    let error, data;
+    if (newKupac) {
+      ({error, data} = await sb.from("kupci").insert([row]).select().single());
+      if (!error) {
+        const entries = Object.entries(KUPAC_LABELS)
+          .filter(([k]) => tempData[k] !== undefined && tempData[k] !== "" && tempData[k] !== null)
+          .map(([k,lbl]) => ({
+            entity_type:"kupac", entity_id:data?.id||"new",
+            entity_label:tempData.Naziv||tempData.SifraKupca, action:"create",
+            field_name:k, field_label:lbl,
+            old_value:null, new_value:tempData[k],
+          }));
+        if (entries.length) await writeLog(entries);
+      }
+    } else {
+      const prev = kupci.find(k=>k.id===editingKupac);
+      ({error} = await sb.from("kupci").update(row).eq("id",editingKupac));
+      if (!error && prev) {
+        const changed = Object.entries(KUPAC_LABELS)
+          .filter(([k]) => fmtVal(prev[k]) !== fmtVal(tempData[k]))
+          .map(([k,lbl]) => ({
+            entity_type:"kupac", entity_id:editingKupac,
+            entity_label:prev.Naziv||prev.SifraKupca, action:"update",
+            field_name:k, field_label:lbl,
+            old_value:prev[k], new_value:tempData[k],
+          }));
+        if (changed.length) await writeLog(changed);
+      }
+    }
     setSaving(false);
     if (error) { setGlobalErr("Greška: "+error.message); return; }
     await loadKupci(); closeModal();
   }
   async function deleteKupac(id) {
+    const kupac = kupci.find(k=>k.id===id);
     const {error} = await sb.from("kupci").delete().eq("id",id);
     if (error) { setGlobalErr("Greška: "+error.message); return; }
+    await writeLog([{
+      entity_type:"kupac", entity_id:id,
+      entity_label:kupac?.Naziv||kupac?.SifraKupca||id,
+      action:"delete",
+      field_name:null, field_label:null,
+      old_value:kupac?.Naziv||id, new_value:null,
+    }]);
     setKupci(ks=>ks.filter(k=>k.id!==id)); setConfirmDelete(null);
   }
 
@@ -2549,10 +2932,22 @@ export default function App() {
     if (!tempData.prezime?.trim()) e.prezime="Obavezno.";
     if (Object.keys(e).length) { setTempErrors(e); return; }
     setSaving(true);
+    const prev = users.find(u=>u.id===editingUser);
     const row={ime:tempData.ime,prezime:tempData.prezime,telefon:tempData.telefon,adresa:tempData.adresa,is_admin:tempData.is_admin||false,tab_permissions:tempData.tab_permissions||{},can_publish_layouts:tempData.can_publish_layouts||false};
     const {error} = await sb.from("profiles").update(row).eq("id",editingUser);
     setSaving(false);
     if (error) { setGlobalErr("Greška: "+error.message); return; }
+    if (prev) {
+      const changed = Object.entries(USER_LABELS)
+        .filter(([k]) => fmtVal(prev[k]) !== fmtVal(tempData[k]))
+        .map(([k,lbl]) => ({
+          entity_type:"korisnik", entity_id:editingUser,
+          entity_label:`${tempData.ime} ${tempData.prezime}`.trim(), action:"update",
+          field_name:k, field_label:lbl,
+          old_value:prev[k], new_value:tempData[k],
+        }));
+      if (changed.length) await writeLog(changed);
+    }
     await loadUsers(); closeModal();
   }
 
@@ -2744,6 +3139,10 @@ export default function App() {
         {view==="kupci" && <KupciView kupci={kupci} canEdit={canEdit("kupci")} onNew={openNewKupac} onEdit={openEditKupac} onDelete={id=>setConfirmDelete({type:"kupac",id})} onView={setViewingKupac} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>}
 
         {view==="obracun" && <ObracunView poslovi={poslovi} placanjeColor={placanjeColor}/>}
+
+        {view==="changelog" && profile?.is_admin && (
+          <ChangelogView/>
+        )}
 
         {view==="uputstvo" && (
           <div style={{margin:"-22px -20px"}}>
