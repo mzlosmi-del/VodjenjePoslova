@@ -1130,23 +1130,25 @@ function ObracunView({poslovi, placanjeColor}) {
 // ── UPUTSTVO (Manual) ────────────────────────────────────────────────────────
 // ── ChangelogView ─────────────────────────────────────────────────────────────
 function ChangelogView() {
-  const [logs, setLogs]         = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [search, setSearch]     = useState("");
+  const [logs, setLogs]       = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch]   = useState("");
   const [filterAction, setFilterAction] = useState("sve");
   const [filterEntity, setFilterEntity] = useState("sve");
-  const [filterActor, setFilterActor]   = useState("sve");
-  const [page, setPage]         = useState(0);
+  const [filterActor,  setFilterActor]  = useState("sve");
+  const [expanded, setExpanded] = useState({}); // id -> bool
+  const [page, setPage]       = useState(0);
   const PAGE = 50;
 
-  useEffect(() => {
+  function loadLogs() {
     setLoading(true);
     sb.from("change_log")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(2000)
       .then(({ data }) => { setLogs(data || []); setLoading(false); });
-  }, []);
+  }
+  useEffect(loadLogs, []);
 
   const actors   = useMemo(() => [...new Set(logs.map(l=>l.actor))].sort(), [logs]);
   const entities = useMemo(() => [...new Set(logs.map(l=>l.entity_type))].sort(), [logs]);
@@ -1158,20 +1160,23 @@ function ChangelogView() {
       if (filterEntity !== "sve" && l.entity_type !== filterEntity) return false;
       if (filterActor  !== "sve" && l.actor !== filterActor) return false;
       if (!q) return true;
-      return [l.actor, l.entity_label, l.field_label, l.old_value, l.new_value, l.action]
+      const changesText = (l.changes||[]).map(c=>`${c.label} ${c.old} ${c.new}`).join(" ");
+      return [l.actor, l.entity_label, l.action, changesText]
         .some(v => (v||"").toLowerCase().includes(q));
     });
   }, [logs, search, filterAction, filterEntity, filterActor]);
 
-  const paged = filtered.slice(page * PAGE, (page + 1) * PAGE);
+  const paged      = filtered.slice(page * PAGE, (page + 1) * PAGE);
   const totalPages = Math.ceil(filtered.length / PAGE);
 
-  function resetFilters() { setSearch(""); setFilterAction("sve"); setFilterEntity("sve"); setFilterActor("sve"); setPage(0); }
+  function resetFilters() {
+    setSearch(""); setFilterAction("sve"); setFilterEntity("sve"); setFilterActor("sve"); setPage(0);
+  }
 
   const actionMeta = {
-    create: { label:"Kreiranje", color:T.green,  bg:T.greenBg,  border:T.greenBorder,  icon:"✚" },
-    update: { label:"Izmena",    color:T.primary, bg:T.primaryLight, border:T.primaryBorder, icon:"✎" },
-    delete: { label:"Brisanje",  color:T.red,     bg:T.redBg,    border:T.redBorder,    icon:"✕" },
+    create: { label:"Kreiranje", color:T.green,   bg:T.greenBg,     border:T.greenBorder,   icon:"✚" },
+    update: { label:"Izmena",    color:T.primary,  bg:T.primaryLight, border:T.primaryBorder, icon:"✎" },
+    delete: { label:"Brisanje",  color:T.red,      bg:T.redBg,       border:T.redBorder,     icon:"✕" },
   };
   const entityLabel = { posao:"Posao", kupac:"Kupac", korisnik:"Korisnik" };
 
@@ -1188,25 +1193,93 @@ function ChangelogView() {
     cursor:"pointer", outline:"none", colorScheme:"dark",
   };
 
+  // Renders the expandable changes diff block
+  function ChangesBlock({ log, rowIdx }) {
+    const changes = log.changes || [];
+    const m = actionMeta[log.action] || actionMeta.update;
+    const isOpen = expanded[log.id];
+
+    if (log.action === "delete") {
+      return (
+        <span style={{color:T.textSoft,fontSize:11,fontStyle:"italic"}}>Zapis je obrisan</span>
+      );
+    }
+    if (changes.length === 0) {
+      return <span style={{color:T.textSoft,fontSize:11,fontStyle:"italic"}}>Nema promena</span>;
+    }
+    // Show first change inline; expand for rest
+    const first = changes[0];
+    const rest  = changes.slice(1);
+    return (
+      <div>
+        {/* First change always visible */}
+        <ChangeLine c={first} action={log.action}/>
+        {/* Rest toggled */}
+        {rest.length > 0 && (
+          <>
+            {isOpen && rest.map((c,i) => <ChangeLine key={i} c={c} action={log.action}/>)}
+            <button
+              onClick={()=>setExpanded(e=>({...e,[log.id]:!e[log.id]}))}
+              style={{marginTop:4,background:"none",border:`1px solid ${T.border}`,
+                color:T.textSoft,borderRadius:4,padding:"1px 7px",cursor:"pointer",
+                fontSize:10,fontFamily:T.fontBody}}>
+              {isOpen ? `▲ Sakrij` : `▼ +${rest.length} polja`}
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  function ChangeLine({ c, action }) {
+    const isCreate = action === "create";
+    return (
+      <div style={{display:"flex",alignItems:"baseline",gap:5,marginBottom:3,flexWrap:"wrap"}}>
+        <span style={{color:T.textMid,fontSize:11,fontWeight:600,minWidth:0,flexShrink:0}}>
+          {c.label}
+        </span>
+        {!isCreate && c.old != null && c.old !== "—" && (
+          <span style={{background:T.redBg,border:`1px solid ${T.redBorder}`,color:T.red,
+            borderRadius:3,padding:"0px 6px",fontSize:10,maxWidth:160,overflow:"hidden",
+            textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={c.old}>
+            {c.old}
+          </span>
+        )}
+        {!isCreate && c.old != null && c.old !== "—" && (
+          <span style={{color:T.textSoft,fontSize:10}}>→</span>
+        )}
+        {c.new != null && (
+          <span style={{background:T.greenBg,border:`1px solid ${T.greenBorder}`,color:T.green,
+            borderRadius:3,padding:"0px 6px",fontSize:10,maxWidth:160,overflow:"hidden",
+            textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={c.new}>
+            {c.new}
+          </span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
       {/* Header */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18,gap:12,flexWrap:"wrap"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",
+        marginBottom:18,gap:12,flexWrap:"wrap"}}>
         <div>
           <h1 style={{fontFamily:T.fontHead,fontSize:22,fontWeight:800,color:T.text,
             letterSpacing:"-0.03em",margin:"0 0 4px"}}>🕓 Istorija izmena</h1>
           <p style={{color:T.textSoft,fontSize:12,margin:0,fontFamily:T.fontBody}}>
-            Sve promene: kreiranje, izmene i brisanje zapisa sa starim i novim vrednostima
+            Jedan zapis po operaciji — polja grupisana u diff prikazu
           </p>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-          <span style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,
-            padding:"4px 12px",fontSize:12,color:T.textMid,fontFamily:T.fontBody}}>
+          <span style={{background:T.surfaceRaised,border:`1px solid ${T.border}`,
+            borderRadius:T.radiusSm,padding:"4px 12px",fontSize:12,color:T.textMid,fontFamily:T.fontBody}}>
             {filtered.length.toLocaleString()} {filtered.length===1?"zapis":"zapisa"}
           </span>
-          <button onClick={()=>{setLoading(true);sb.from("change_log").select("*").order("created_at",{ascending:false}).limit(2000).then(({data})=>{setLogs(data||[]);setLoading(false);});}}
+          <button onClick={loadLogs}
             style={{background:T.primaryLight,border:`1px solid ${T.primaryBorder}`,color:T.primary,
-              borderRadius:T.radiusSm,padding:"5px 12px",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:T.fontBody}}>
+              borderRadius:T.radiusSm,padding:"5px 12px",cursor:"pointer",fontSize:12,
+              fontWeight:600,fontFamily:T.fontBody}}>
             ↻ Osveži
           </button>
         </div>
@@ -1214,15 +1287,21 @@ function ChangelogView() {
 
       {/* Filters */}
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-        {/* Search */}
         <div style={{position:"relative",flex:"1 1 220px",minWidth:180}}>
-          <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",fontSize:13,pointerEvents:"none"}}>🔍</span>
-          <input
-            value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}
+          <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",
+            fontSize:13,pointerEvents:"none"}}>🔍</span>
+          <input value={search}
+            onChange={e=>{setSearch(e.target.value);setPage(0);}}
             onKeyDown={e=>{if(e.key==="Escape"){setSearch("");setPage(0);}}}
             placeholder="Pretraži..." style={{...selStyle,width:"100%",paddingLeft:30,
               border:`1px solid ${search?T.primary:T.border}`,color:T.text,boxSizing:"border-box"}}/>
-          {search && <button onClick={()=>{setSearch("");setPage(0);}} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:T.textSoft,cursor:"pointer",fontSize:14,lineHeight:1}}>×</button>}
+          {search && (
+            <button onClick={()=>{setSearch("");setPage(0);}}
+              style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",
+                background:"none",border:"none",color:T.textSoft,cursor:"pointer",fontSize:14,lineHeight:1}}>
+              ×
+            </button>
+          )}
         </div>
         <select value={filterAction} onChange={e=>{setFilterAction(e.target.value);setPage(0);}} style={selStyle}>
           <option value="sve">Sve akcije</option>
@@ -1239,9 +1318,10 @@ function ChangelogView() {
           {actors.map(a=><option key={a} value={a}>{a}</option>)}
         </select>
         {(search||filterAction!=="sve"||filterEntity!=="sve"||filterActor!=="sve") && (
-          <button onClick={resetFilters} style={{background:"none",border:`1px solid ${T.border}`,
-            color:T.textMid,borderRadius:T.radiusSm,padding:"6px 12px",cursor:"pointer",
-            fontSize:12,fontFamily:T.fontBody}}>✕ Resetuj</button>
+          <button onClick={resetFilters}
+            style={{background:"none",border:`1px solid ${T.border}`,color:T.textMid,
+              borderRadius:T.radiusSm,padding:"6px 12px",cursor:"pointer",fontSize:12,
+              fontFamily:T.fontBody}}>✕ Resetuj</button>
         )}
       </div>
 
@@ -1251,8 +1331,10 @@ function ChangelogView() {
           const cnt = filtered.filter(l=>l.action===k).length;
           if (!cnt) return null;
           return (
-            <button key={k} onClick={()=>{setFilterAction(filterAction===k?"sve":k);setPage(0);}}
-              style={{background:filterAction===k?m.bg:"none",border:`1px solid ${filterAction===k?m.border:T.border}`,
+            <button key={k}
+              onClick={()=>{setFilterAction(filterAction===k?"sve":k);setPage(0);}}
+              style={{background:filterAction===k?m.bg:"none",
+                border:`1px solid ${filterAction===k?m.border:T.border}`,
                 color:filterAction===k?m.color:T.textSoft,borderRadius:T.radiusSm,
                 padding:"3px 10px",cursor:"pointer",fontSize:11,fontWeight:600,fontFamily:T.fontBody}}>
               {m.icon} {m.label} {cnt}
@@ -1263,23 +1345,27 @@ function ChangelogView() {
 
       {/* Table */}
       {loading ? (
-        <div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:60,color:T.textSoft,fontFamily:T.fontBody,gap:12}}>
-          <div style={{width:24,height:24,border:`3px solid ${T.border}`,borderTopColor:T.primary,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",
+          padding:60,color:T.textSoft,fontFamily:T.fontBody,gap:12}}>
+          <div style={{width:24,height:24,border:`3px solid ${T.border}`,
+            borderTopColor:T.primary,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
           Učitavanje...
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{textAlign:"center",padding:"60px 20px",color:T.textSoft,fontFamily:T.fontBody,fontSize:13}}>
+        <div style={{textAlign:"center",padding:"60px 20px",color:T.textSoft,
+          fontFamily:T.fontBody,fontSize:13}}>
           <div style={{fontSize:36,marginBottom:12}}>🕓</div>
           Nema zapisa koji odgovaraju filteru
         </div>
       ) : (
         <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`}}>
-          <table style={{width:"100%",borderCollapse:"collapse",background:T.surface,fontFamily:T.fontBody}}>
+          <table style={{width:"100%",borderCollapse:"collapse",background:T.surface,
+            fontFamily:T.fontBody}}>
             <thead>
               <tr>
-                {["Datum i vreme","Korisnik","Akcija","Entitet","Zapis","Polje","Prethodna vrednost","Nova vrednost"].map(h=>(
-                  <th key={h} style={{padding:"9px 12px",textAlign:"left",color:T.textSoft,fontSize:10,
-                    textTransform:"uppercase",letterSpacing:"0.07em",fontWeight:700,
+                {["Datum i vreme","Korisnik","Akcija","Entitet","Zapis","Izmene"].map(h=>(
+                  <th key={h} style={{padding:"9px 12px",textAlign:"left",color:T.textSoft,
+                    fontSize:10,textTransform:"uppercase",letterSpacing:"0.07em",fontWeight:700,
                     borderBottom:`1px solid ${T.border}`,background:"#1C2330",whiteSpace:"nowrap"}}>
                     {h}
                   </th>
@@ -1291,15 +1377,15 @@ function ChangelogView() {
                 const m = actionMeta[log.action] || actionMeta.update;
                 return (
                   <tr key={log.id||i}
-                    style={{background:i%2===0?T.surface:T.surfaceHover}}
-                    onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight}
-                    onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:T.surfaceHover}>
+                    style={{background:i%2===0?T.surface:T.surfaceHover,verticalAlign:"top"}}>
                     {/* DateTime */}
-                    <td style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
-                      <span style={{fontFamily:"monospace",fontSize:11,color:T.textMid}}>{fmtDateTime(log.created_at)}</span>
+                    <td style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
+                      <span style={{fontFamily:"monospace",fontSize:11,color:T.textMid}}>
+                        {fmtDateTime(log.created_at)}
+                      </span>
                     </td>
                     {/* Actor */}
-                    <td style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
+                    <td style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
                       <div style={{display:"flex",alignItems:"center",gap:6}}>
                         <div style={{width:22,height:22,borderRadius:"50%",background:T.primaryLight,
                           border:`1.5px solid ${T.primaryBorder}`,display:"flex",alignItems:"center",
@@ -1310,47 +1396,27 @@ function ChangelogView() {
                       </div>
                     </td>
                     {/* Action */}
-                    <td style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
+                    <td style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
                       <span style={{background:m.bg,color:m.color,border:`1px solid ${m.border}`,
                         borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:700}}>
                         {m.icon} {m.label}
                       </span>
                     </td>
                     {/* Entity type */}
-                    <td style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
-                      <span style={{color:T.textMid,fontSize:12}}>{entityLabel[log.entity_type]||log.entity_type}</span>
-                    </td>
-                    {/* Entity label */}
-                    <td style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
-                      <span style={{color:T.primary,fontWeight:700,fontSize:12}}>{log.entity_label||"—"}</span>
-                    </td>
-                    {/* Field */}
-                    <td style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
-                      <span style={{color:log.field_label?T.text:T.textSoft,fontSize:12,fontWeight:log.field_label?500:400}}>
-                        {log.field_label||<span style={{fontStyle:"italic",color:T.textSoft}}>ceo zapis</span>}
+                    <td style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
+                      <span style={{color:T.textMid,fontSize:12}}>
+                        {entityLabel[log.entity_type]||log.entity_type}
                       </span>
                     </td>
-                    {/* Old value */}
-                    <td style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,maxWidth:200}}>
-                      {log.old_value != null
-                        ? <span style={{background:T.redBg,border:`1px solid ${T.redBorder}`,color:T.red,
-                            borderRadius:4,padding:"2px 8px",fontSize:11,display:"inline-block",
-                            maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}
-                            title={log.old_value}>
-                            {log.old_value}
-                          </span>
-                        : <span style={{color:T.textSoft,fontSize:11,fontStyle:"italic"}}>—</span>}
+                    {/* Entity label */}
+                    <td style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
+                      <span style={{color:T.primary,fontWeight:700,fontSize:12}}>
+                        {log.entity_label||"—"}
+                      </span>
                     </td>
-                    {/* New value */}
-                    <td style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,maxWidth:200}}>
-                      {log.new_value != null
-                        ? <span style={{background:T.greenBg,border:`1px solid ${T.greenBorder}`,color:T.green,
-                            borderRadius:4,padding:"2px 8px",fontSize:11,display:"inline-block",
-                            maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}
-                            title={log.new_value}>
-                            {log.new_value}
-                          </span>
-                        : <span style={{color:T.textSoft,fontSize:11,fontStyle:"italic"}}>—</span>}
+                    {/* Changes diff */}
+                    <td style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,minWidth:260}}>
+                      <ChangesBlock log={log} rowIdx={i}/>
                     </td>
                   </tr>
                 );
@@ -1362,17 +1428,20 @@ function ChangelogView() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8,marginTop:16,fontFamily:T.fontBody}}>
+        <div style={{display:"flex",justifyContent:"center",alignItems:"center",
+          gap:8,marginTop:16,fontFamily:T.fontBody}}>
           <button onClick={()=>setPage(p=>Math.max(0,p-1))} disabled={page===0}
-            style={{background:"none",border:`1px solid ${T.border}`,color:page===0?T.textSoft:T.textMid,
-              borderRadius:T.radiusSm,padding:"5px 14px",cursor:page===0?"default":"pointer",
+            style={{background:"none",border:`1px solid ${T.border}`,
+              color:page===0?T.textSoft:T.textMid,borderRadius:T.radiusSm,
+              padding:"5px 14px",cursor:page===0?"default":"pointer",
               fontSize:12,opacity:page===0?0.5:1}}>← Prethodna</button>
           <span style={{color:T.textMid,fontSize:12}}>
             Strana {page+1} od {totalPages} &nbsp;·&nbsp; {filtered.length} zapisa
           </span>
           <button onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))} disabled={page===totalPages-1}
-            style={{background:"none",border:`1px solid ${T.border}`,color:page===totalPages-1?T.textSoft:T.textMid,
-              borderRadius:T.radiusSm,padding:"5px 14px",cursor:page===totalPages-1?"default":"pointer",
+            style={{background:"none",border:`1px solid ${T.border}`,
+              color:page===totalPages-1?T.textSoft:T.textMid,borderRadius:T.radiusSm,
+              padding:"5px 14px",cursor:page===totalPages-1?"default":"pointer",
               fontSize:12,opacity:page===totalPages-1?0.5:1}}>Sledeća →</button>
         </div>
       )}
@@ -2726,23 +2795,25 @@ export default function App() {
     setPoslovi(ps=>ps.map(p=>p.id===id?{...p,[appField]:value}:p));
     const {error} = await sb.from("poslovi").update({[dbField]:value}).eq("id",id);
     if (error) { setGlobalErr("Greška: "+error.message); loadPoslovi(); return; }
-    await writeLog([{
-      entity_type:"posao", entity_id:id,
-      entity_label:oldPosao?.Posao||id,
-      action:"update",
-      field_name:appField,
-      field_label:INLINE_LABELS[appField]||appField,
-      old_value:oldValue, new_value:value,
-    }]);
+    // OPT 2: only log financially significant inline fields
+    if (INLINE_LOG.has(appField)) {
+      await writeLog({
+        entity_type:"posao", entity_id:id,
+        entity_label:oldPosao?.Posao||String(id),
+        action:"update",
+        changes:[{ field:appField, label:INLINE_LABELS[appField], old:fmtVal(oldValue), new:fmtVal(value) }],
+      });
+    }
   }
 
-  // ── Changelog helpers ────────────────────────────────────────────────────────
+  // ── Changelog helpers ─────────────────────────────────────────────────────────
+  // OPT 1: one row per save, all changed fields packed into changes[] JSON
+  // OPT 2: skip low-signal operational statuses (Izrada/Isporuka/Montaza)
   const POSAO_LABELS = {
-    Posao:"Broj posla", KLIJENT:"Klijent", SifraKupca:"Šifra kupca",
+    KLIJENT:"Klijent", SifraKupca:"Šifra kupca",
     DatumUnosa:"Datum unosa", RokZaIsporuku:"Rok za isporuku", Unosilac:"Unosilac",
     Opis:"Opis", PoslatiNaIzradu:"Poslati na izradu", MontazaIsporuka:"Montaža/Isporuka",
-    Placanje:"Plaćanje", StatusIzrade:"Status izrade", StatusIsporuke:"Status isporuke",
-    StatusMontaze:"Status montaže", SpecifikacijaCene:"Specifikacija cene",
+    Placanje:"Plaćanje", SpecifikacijaCene:"Specifikacija cene",
     Obracun:"Obračun (RSD)", ZavrsenPosao:"Završen posao", Fakturisano:"Fakturisano",
   };
   const KUPAC_LABELS = {
@@ -2753,10 +2824,9 @@ export default function App() {
     ime:"Ime", prezime:"Prezime", telefon:"Telefon", adresa:"Adresa",
     tab_permissions:"Dozvole", can_publish_layouts:"Objavljuje rasporede",
   };
-  const INLINE_LABELS = {
-    StatusIzrade:"Status izrade", StatusIsporuke:"Status isporuke",
-    StatusMontaze:"Status montaže", Fakturisano:"Fakturisano", ZavrsenPosao:"Završen posao",
-  };
+  // OPT 2: only financially meaningful inline fields get logged
+  const INLINE_LOG   = new Set(["ZavrsenPosao","Fakturisano"]);
+  const INLINE_LABELS = { ZavrsenPosao:"Završen posao", Fakturisano:"Fakturisano" };
 
   function fmtVal(v) {
     if (v === null || v === undefined || v === "") return "—";
@@ -2766,22 +2836,19 @@ export default function App() {
     return String(v);
   }
 
-  async function writeLog(entries) {
-    // entries: [{ entity_type, entity_id, entity_label, action, field_name, field_label, old_value, new_value }]
+  // OPT 1: single INSERT per operation with changes as JSON array
+  async function writeLog({ entity_type, entity_id, entity_label, action, changes }) {
+    if (action === "update" && (!changes || changes.length === 0)) return;
     const actor = profile ? `${profile.ime||""} ${profile.prezime||""}`.trim() : "—";
-    const rows = entries.map(e => ({
+    await sb.from("change_log").insert([{
       actor,
-      entity_type:  e.entity_type,
-      entity_id:    e.entity_id,
-      entity_label: e.entity_label,
-      action:       e.action,           // 'create' | 'update' | 'delete'
-      field_name:   e.field_name||null,
-      field_label:  e.field_label||null,
-      old_value:    e.old_value!=null ? fmtVal(e.old_value) : null,
-      new_value:    e.new_value!=null ? fmtVal(e.new_value) : null,
+      entity_type,
+      entity_id:    String(entity_id),
+      entity_label,
+      action,
+      changes:      changes || null,
       created_at:   new Date().toISOString(),
-    }));
-    await sb.from("change_log").insert(rows);
+    }]);
   }
 
   function openEditPosao(p) { setEditingPosao(p.id); setTempData({...p}); setTempErrors({}); }
@@ -2819,33 +2886,19 @@ export default function App() {
     if (newPosao) {
       ({error, data} = await sb.from("poslovi").insert([row]).select().single());
       if (!error) {
-        const entries = Object.entries(POSAO_LABELS)
-          .filter(([k]) => k !== "Posao" && tempData[k] !== undefined && tempData[k] !== "" && tempData[k] !== false && tempData[k] !== null)
-          .map(([k,lbl]) => ({
-            entity_type:"posao", entity_id:data?.id||"new",
-            entity_label:tempData.Posao, action:"create",
-            field_name:k, field_label:lbl,
-            old_value:null, new_value:tempData[k],
-          }));
-        if (entries.length) await writeLog(entries);
+        const changes = Object.entries(POSAO_LABELS)
+          .filter(([k]) => tempData[k] !== undefined && tempData[k] !== "" && tempData[k] !== false && tempData[k] !== null)
+          .map(([k,lbl]) => ({ field:k, label:lbl, old:null, new:fmtVal(tempData[k]) }));
+        await writeLog({ entity_type:"posao", entity_id:data?.id||"new", entity_label:tempData.Posao, action:"create", changes });
       }
     } else {
       const prev = poslovi.find(p=>p.id===editingPosao);
       ({error} = await sb.from("poslovi").update(row).eq("id",editingPosao));
       if (!error && prev) {
-        const changed = Object.entries(POSAO_LABELS)
-          .filter(([k]) => {
-            const a = fmtVal(prev[k]);
-            const b = fmtVal(tempData[k]);
-            return a !== b;
-          })
-          .map(([k,lbl]) => ({
-            entity_type:"posao", entity_id:editingPosao,
-            entity_label:prev.Posao, action:"update",
-            field_name:k, field_label:lbl,
-            old_value:prev[k], new_value:tempData[k],
-          }));
-        if (changed.length) await writeLog(changed);
+        const changes = Object.entries(POSAO_LABELS)
+          .filter(([k]) => fmtVal(prev[k]) !== fmtVal(tempData[k]))
+          .map(([k,lbl]) => ({ field:k, label:lbl, old:fmtVal(prev[k]), new:fmtVal(tempData[k]) }));
+        await writeLog({ entity_type:"posao", entity_id:editingPosao, entity_label:prev.Posao, action:"update", changes });
       }
     }
     setSaving(false);
@@ -2856,13 +2909,7 @@ export default function App() {
     const posao = poslovi.find(p=>p.id===id);
     const {error} = await sb.from("poslovi").delete().eq("id",id);
     if (error) { setGlobalErr("Greška: "+error.message); return; }
-    await writeLog([{
-      entity_type:"posao", entity_id:id,
-      entity_label:posao?.Posao||id,
-      action:"delete",
-      field_name:null, field_label:null,
-      old_value:posao?.Posao||id, new_value:null,
-    }]);
+    await writeLog({ entity_type:"posao", entity_id:id, entity_label:posao?.Posao||String(id), action:"delete", changes:null });
     setPoslovi(ps=>ps.filter(p=>p.id!==id)); setConfirmDelete(null);
   }
 
@@ -2882,29 +2929,19 @@ export default function App() {
     if (newKupac) {
       ({error, data} = await sb.from("kupci").insert([row]).select().single());
       if (!error) {
-        const entries = Object.entries(KUPAC_LABELS)
+        const changes = Object.entries(KUPAC_LABELS)
           .filter(([k]) => tempData[k] !== undefined && tempData[k] !== "" && tempData[k] !== null)
-          .map(([k,lbl]) => ({
-            entity_type:"kupac", entity_id:data?.id||"new",
-            entity_label:tempData.Naziv||tempData.SifraKupca, action:"create",
-            field_name:k, field_label:lbl,
-            old_value:null, new_value:tempData[k],
-          }));
-        if (entries.length) await writeLog(entries);
+          .map(([k,lbl]) => ({ field:k, label:lbl, old:null, new:fmtVal(tempData[k]) }));
+        await writeLog({ entity_type:"kupac", entity_id:data?.id||"new", entity_label:tempData.Naziv||tempData.SifraKupca, action:"create", changes });
       }
     } else {
       const prev = kupci.find(k=>k.id===editingKupac);
       ({error} = await sb.from("kupci").update(row).eq("id",editingKupac));
       if (!error && prev) {
-        const changed = Object.entries(KUPAC_LABELS)
+        const changes = Object.entries(KUPAC_LABELS)
           .filter(([k]) => fmtVal(prev[k]) !== fmtVal(tempData[k]))
-          .map(([k,lbl]) => ({
-            entity_type:"kupac", entity_id:editingKupac,
-            entity_label:prev.Naziv||prev.SifraKupca, action:"update",
-            field_name:k, field_label:lbl,
-            old_value:prev[k], new_value:tempData[k],
-          }));
-        if (changed.length) await writeLog(changed);
+          .map(([k,lbl]) => ({ field:k, label:lbl, old:fmtVal(prev[k]), new:fmtVal(tempData[k]) }));
+        await writeLog({ entity_type:"kupac", entity_id:editingKupac, entity_label:prev.Naziv||prev.SifraKupca, action:"update", changes });
       }
     }
     setSaving(false);
@@ -2915,13 +2952,7 @@ export default function App() {
     const kupac = kupci.find(k=>k.id===id);
     const {error} = await sb.from("kupci").delete().eq("id",id);
     if (error) { setGlobalErr("Greška: "+error.message); return; }
-    await writeLog([{
-      entity_type:"kupac", entity_id:id,
-      entity_label:kupac?.Naziv||kupac?.SifraKupca||id,
-      action:"delete",
-      field_name:null, field_label:null,
-      old_value:kupac?.Naziv||id, new_value:null,
-    }]);
+    await writeLog({ entity_type:"kupac", entity_id:id, entity_label:kupac?.Naziv||kupac?.SifraKupca||String(id), action:"delete", changes:null });
     setKupci(ks=>ks.filter(k=>k.id!==id)); setConfirmDelete(null);
   }
 
@@ -2938,15 +2969,10 @@ export default function App() {
     setSaving(false);
     if (error) { setGlobalErr("Greška: "+error.message); return; }
     if (prev) {
-      const changed = Object.entries(USER_LABELS)
+      const changes = Object.entries(USER_LABELS)
         .filter(([k]) => fmtVal(prev[k]) !== fmtVal(tempData[k]))
-        .map(([k,lbl]) => ({
-          entity_type:"korisnik", entity_id:editingUser,
-          entity_label:`${tempData.ime} ${tempData.prezime}`.trim(), action:"update",
-          field_name:k, field_label:lbl,
-          old_value:prev[k], new_value:tempData[k],
-        }));
-      if (changed.length) await writeLog(changed);
+        .map(([k,lbl]) => ({ field:k, label:lbl, old:fmtVal(prev[k]), new:fmtVal(tempData[k]) }));
+      await writeLog({ entity_type:"korisnik", entity_id:editingUser, entity_label:`${tempData.ime} ${tempData.prezime}`.trim(), action:"update", changes });
     }
     await loadUsers(); closeModal();
   }
