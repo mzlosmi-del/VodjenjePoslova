@@ -689,7 +689,7 @@ function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZ
     <>
       <ctrl.Toolbar/>
       <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
-        <table style={{width:"100%",borderCollapse:"collapse",background:T.surface,tableLayout:"fixed"}}>
+        <table style={{width:"max-content",minWidth:"100%",borderCollapse:"collapse",background:T.surface}}>
           <thead>
             <tr>
               {visibleCols.map(col=>(
@@ -744,7 +744,7 @@ function SimpleTable({rows, viewKey, columns, renderCell, emptyMsg="Nema zapisa"
     <>
       <ctrl.Toolbar/>
       <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
-        <table style={{width:"100%",borderCollapse:"collapse",background:T.surface,tableLayout:"fixed"}}>
+        <table style={{width:"max-content",minWidth:"100%",borderCollapse:"collapse",background:T.surface}}>
           <thead><tr>
             {visibleCols.map(col=>(
               <th key={col.key} {...ctrl.thDraggable(col)}>
@@ -789,7 +789,7 @@ function KupciView({kupci, canEdit, onNew, onEdit, onDelete, onView, currentUser
       <PageHeader title="Kupci" subtitle="Baza klijenata" action={canEdit&&<button onClick={onNew} style={btnS("primary")}>+ Novi kupac</button>}/>
       <ctrl.Toolbar/>
       <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
-            <table style={{width:"100%",borderCollapse:"collapse",background:T.surface,tableLayout:"fixed"}}>
+            <table style={{width:"max-content",minWidth:"100%",borderCollapse:"collapse",background:T.surface}}>
               <thead><tr>
                 {visibleCols.map(col=>(
                   <th key={col.key} {...ctrl.thDraggable(col)}>
