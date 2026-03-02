@@ -1083,6 +1083,37 @@ function ObracunView({poslovi, placanjeColor}) {
         <label style={{display:"block",color:T.textSoft,fontSize:11,fontWeight:500,marginBottom:4}}>Do datuma unosa</label>
         <input type="date" value={toDate} onChange={e=>setToDate(e.target.value)} style={{...inp,width:155}}/>
       </div>
+      {/* Quick range presets */}
+      <div style={{display:"flex",gap:5,alignSelf:"flex-end",flexWrap:"wrap"}}>
+        {[
+          { label:"Prošla sedmica", fn:() => {
+            const d = new Date(); d.setDate(d.getDate() - d.getDay() - 6);
+            const from = new Date(d); from.setDate(from.getDate());
+            const to   = new Date(from); to.setDate(to.getDate() + 6);
+            setFromDate(from.toISOString().slice(0,10)); setToDate(to.toISOString().slice(0,10));
+          }},
+          { label:"Prošli mesec", fn:() => {
+            const d = new Date();
+            const from = new Date(d.getFullYear(), d.getMonth()-1, 1);
+            const to   = new Date(d.getFullYear(), d.getMonth(), 0);
+            setFromDate(from.toISOString().slice(0,10)); setToDate(to.toISOString().slice(0,10));
+          }},
+          { label:"Poslednjih 3 mes.", fn:() => {
+            const to   = new Date();
+            const from = new Date(to.getFullYear(), to.getMonth()-2, 1);
+            setFromDate(from.toISOString().slice(0,10)); setToDate(to.toISOString().slice(0,10));
+          }},
+          { label:"Prošla godina", fn:() => {
+            const y = new Date().getFullYear()-1;
+            setFromDate(`${y}-01-01`); setToDate(`${y}-12-31`);
+          }},
+        ].map(({label,fn})=>(
+          <button key={label} onClick={fn}
+            style={{...btnS("ghost"),padding:"7px 11px",fontSize:11,whiteSpace:"nowrap"}}>
+            {label}
+          </button>
+        ))}
+      </div>
       {hasFilter && (
         <button onClick={()=>{setFromDate("");setToDate("");}}
           style={{...btnS("ghost"),padding:"7px 14px",fontSize:12,alignSelf:"flex-end"}}>
