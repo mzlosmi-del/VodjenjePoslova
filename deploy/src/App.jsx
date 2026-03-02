@@ -650,10 +650,10 @@ const POSAO_COLS_DEFAULT = [
   {key:"RokZaIsporuku",visible:true,label:"Rok isporuke"},{key:"Unosilac",visible:true,label:"Unosilac"},
   {key:"Opis",visible:true,label:"Opis"},{key:"PoslatiNaIzradu",visible:true,label:"Poslati"},
   {key:"MontazaIsporuka",visible:true,label:"Montaža/Isporuka"},{key:"Placanje",visible:true,label:"Plaćanje"},
-  {key:"StatusIzrade",visible:true,label:"St. izrade"},{key:"StatusIsporuke",visible:true,label:"St. isporuke"},
-  {key:"StatusMontaze",visible:true,label:"St. montaže"},{key:"SpecifikacijaCene",visible:true,label:"Specifikacija"},
-  {key:"Obracun",visible:true,label:"Obračun"},{key:"ZavrsenPosao",visible:true,label:"Završen"},
-  {key:"Fakturisano",visible:false,label:"Fakturisano"},
+  {key:"StatusIzrade",visible:true,label:"Izrada",width:72},{key:"StatusIsporuke",visible:true,label:"Isporuka",width:78},
+  {key:"StatusMontaze",visible:true,label:"Montaža",width:76},{key:"SpecifikacijaCene",visible:true,label:"Specifikacija"},
+  {key:"Obracun",visible:true,label:"Obračun"},{key:"ZavrsenPosao",visible:true,label:"Završen",width:72},
+  {key:"Fakturisano",visible:false,label:"Fakt.",width:72},
 ];
 
 function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZavrsen, onCopy, currentUser, canPublishLayouts}) {
