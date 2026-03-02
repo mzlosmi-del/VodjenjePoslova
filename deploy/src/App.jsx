@@ -1087,25 +1087,24 @@ function ObracunView({poslovi, placanjeColor}) {
       <div style={{display:"flex",gap:5,alignSelf:"flex-end",flexWrap:"wrap"}}>
         {[
           { label:"Prošla sedmica", fn:() => {
-            const d = new Date(); d.setDate(d.getDate() - d.getDay() - 6);
-            const from = new Date(d); from.setDate(from.getDate());
-            const to   = new Date(from); to.setDate(to.getDate() + 6);
+            const to   = new Date();
+            const from = new Date(); from.setDate(from.getDate() - 7);
             setFromDate(from.toISOString().slice(0,10)); setToDate(to.toISOString().slice(0,10));
           }},
           { label:"Prošli mesec", fn:() => {
-            const d = new Date();
-            const from = new Date(d.getFullYear(), d.getMonth()-1, 1);
-            const to   = new Date(d.getFullYear(), d.getMonth(), 0);
+            const to   = new Date();
+            const from = new Date(); from.setMonth(from.getMonth() - 1);
             setFromDate(from.toISOString().slice(0,10)); setToDate(to.toISOString().slice(0,10));
           }},
           { label:"Poslednjih 3 mes.", fn:() => {
             const to   = new Date();
-            const from = new Date(to.getFullYear(), to.getMonth()-2, 1);
+            const from = new Date(); from.setMonth(from.getMonth() - 3);
             setFromDate(from.toISOString().slice(0,10)); setToDate(to.toISOString().slice(0,10));
           }},
           { label:"Prošla godina", fn:() => {
-            const y = new Date().getFullYear()-1;
-            setFromDate(`${y}-01-01`); setToDate(`${y}-12-31`);
+            const to   = new Date();
+            const from = new Date(); from.setFullYear(from.getFullYear() - 1);
+            setFromDate(from.toISOString().slice(0,10)); setToDate(to.toISOString().slice(0,10));
           }},
         ].map(({label,fn})=>(
           <button key={label} onClick={fn}
