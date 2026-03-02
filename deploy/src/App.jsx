@@ -86,7 +86,8 @@ const thS = { padding:"10px 14px", textAlign:"left", color:T.text, fontSize:11,
   textTransform:"uppercase", letterSpacing:"0.07em", fontWeight:700,
   borderBottom:`1px solid ${T.border}`, whiteSpace:"nowrap", background:"#1C2330", fontFamily:T.fontBody };
 const tdS = { padding:"11px 14px", color:T.text, fontSize:13,
-  borderBottom:`1px solid ${T.border}`, verticalAlign:"middle", fontFamily:T.fontBody };
+  borderBottom:`1px solid ${T.border}`, verticalAlign:"middle", fontFamily:T.fontBody,
+  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" };
 
 const btnS = (variant="primary") => {
   if (variant==="primary") return {background:T.primary,border:"none",color:"#fff",borderRadius:T.radiusSm,padding:"8px 18px",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:T.fontBody};
@@ -344,7 +345,8 @@ function useTableControls(viewKey, defaultCols, currentUser, canPublishLayouts) 
   const [saveAsShared, setSaveAsShared] = useState(false);
   const [saveAsDefault, setSaveAsDefault] = useState(false);
   const [layoutsLoaded, setLayoutsLoaded] = useState(false);
-  const dragCol = useRef(null);
+  const dragCol   = useRef(null);
+  const resizeCol = useRef(null);  // { key, startX, startW }
 
   // Load layouts and apply the user's default (or shared default) on mount
   useEffect(() => {
@@ -437,6 +439,26 @@ function useTableControls(viewKey, defaultCols, currentUser, canPublishLayouts) 
     next.splice(toIdx, 0, moved);
     saveCols(next);
     dragCol.current = null;
+  }
+
+  // ── Column resize ───────────────────────────────────────────────────────────
+  function onResizeStart(e, key) {
+    e.preventDefault();
+    e.stopPropagation();
+    const th = e.currentTarget.parentElement;
+    resizeCol.current = { key, startX: e.clientX, startW: th.offsetWidth };
+    function onMove(ev) {
+      const delta = ev.clientX - resizeCol.current.startX;
+      const newW  = Math.max(40, resizeCol.current.startW + delta);
+      setCols(prev => prev.map(c => c.key === key ? { ...c, width: newW } : c));
+    }
+    function onUp() {
+      resizeCol.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup",  onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup",   onUp);
   }
 
   function filterAndSort(rows) {
@@ -580,15 +602,45 @@ function useTableControls(viewKey, defaultCols, currentUser, canPublishLayouts) 
   };
 
   const thDraggable = (col) => ({
-    style: { ...thS, cursor:"pointer", userSelect:"none" },
+    style: {
+      ...thS,
+      cursor: "pointer",
+      userSelect: "none",
+      position: "relative",
+      width: col.width ? col.width : undefined,
+      minWidth: col.width ? col.width : undefined,
+    },
     draggable: true,
     onDragStart: () => onDragStart(col.key),
-    onDragOver: e => e.preventDefault(),
-    onDrop: () => onDrop(col.key),
-    onClick: () => toggleSort(col.key),
+    onDragOver:  e => e.preventDefault(),
+    onDrop:      () => onDrop(col.key),
+    onClick:     () => toggleSort(col.key),
   });
 
-  return { search, sortCol, sortDir, cols, filterAndSort, Toolbar, SortIcon, thDraggable };
+  // Resize handle element — place inside <th> after the label
+  // Double-click resets to auto width
+  const ResizeHandle = ({ colKey }) => (
+    <span
+      onMouseDown={e => onResizeStart(e, colKey)}
+      onDoubleClick={e => { e.stopPropagation(); setCols(prev => prev.map(c => c.key === colKey ? { ...c, width: undefined } : c)); }}
+      onClick={e => e.stopPropagation()}
+      title="Prevuci za promenu širine · Dupli klik za resetovanje"
+      style={{
+        position: "absolute", right: 0, top: 0, bottom: 0,
+        width: 6, cursor: "col-resize",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        zIndex: 2,
+      }}
+    >
+      <span style={{
+        width: 2, height: "60%", borderRadius: 1,
+        background: T.borderStrong, opacity: 0.5,
+        transition: "opacity 0.15s",
+      }}/>
+    </span>
+  );
+
+  return { search, sortCol, sortDir, cols, filterAndSort, Toolbar, SortIcon, thDraggable, ResizeHandle };
 }
 
 // ── POSAO TABLE ───────────────────────────────────────────────────────────────
@@ -637,12 +689,13 @@ function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZ
     <>
       <ctrl.Toolbar/>
       <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
-        <table style={{width:"100%",borderCollapse:"collapse",background:T.surface}}>
+        <table style={{width:"100%",borderCollapse:"collapse",background:T.surface,tableLayout:"fixed"}}>
           <thead>
             <tr>
               {visibleCols.map(col=>(
                 <th key={col.key} {...ctrl.thDraggable(col)}>
                   <span style={{display:"flex",alignItems:"center"}}>{col.label}<ctrl.SortIcon colKey={col.key}/></span>
+                  <ctrl.ResizeHandle colKey={col.key}/>
                 </th>
               ))}
               <th style={thS}></th>
@@ -691,11 +744,12 @@ function SimpleTable({rows, viewKey, columns, renderCell, emptyMsg="Nema zapisa"
     <>
       <ctrl.Toolbar/>
       <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
-        <table style={{width:"100%",borderCollapse:"collapse",background:T.surface}}>
+        <table style={{width:"100%",borderCollapse:"collapse",background:T.surface,tableLayout:"fixed"}}>
           <thead><tr>
             {visibleCols.map(col=>(
               <th key={col.key} {...ctrl.thDraggable(col)}>
                 <span style={{display:"flex",alignItems:"center"}}>{col.label}<ctrl.SortIcon colKey={col.key}/></span>
+                <ctrl.ResizeHandle colKey={col.key}/>
               </th>
             ))}
           </tr></thead>
@@ -735,11 +789,12 @@ function KupciView({kupci, canEdit, onNew, onEdit, onDelete, onView, currentUser
       <PageHeader title="Kupci" subtitle="Baza klijenata" action={canEdit&&<button onClick={onNew} style={btnS("primary")}>+ Novi kupac</button>}/>
       <ctrl.Toolbar/>
       <div style={{overflowX:"auto",borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
-            <table style={{width:"100%",borderCollapse:"collapse",background:T.surface}}>
+            <table style={{width:"100%",borderCollapse:"collapse",background:T.surface,tableLayout:"fixed"}}>
               <thead><tr>
                 {visibleCols.map(col=>(
                   <th key={col.key} {...ctrl.thDraggable(col)}>
                     <span style={{display:"flex",alignItems:"center"}}>{col.label}<ctrl.SortIcon colKey={col.key}/></span>
+                    <ctrl.ResizeHandle colKey={col.key}/>
                   </th>
                 ))}
                 <th style={thS}></th>
@@ -2840,7 +2895,7 @@ export default function App() {
   async function writeLog({ entity_type, entity_id, entity_label, action, changes }) {
     if (action === "update" && (!changes || changes.length === 0)) return;
     const actor = profile ? `${profile.ime||""} ${profile.prezime||""}`.trim() : "—";
-    await sb.from("change_log").insert([{
+    const { error } = await sb.from("change_log").insert([{
       actor,
       entity_type,
       entity_id:    String(entity_id),
@@ -2849,6 +2904,7 @@ export default function App() {
       changes:      changes || null,
       created_at:   new Date().toISOString(),
     }]);
+    if (error) console.warn("change_log insert failed:", error.message);
   }
 
   function openEditPosao(p) { setEditingPosao(p.id); setTempData({...p}); setTempErrors({}); }
