@@ -483,6 +483,13 @@ function useTableControls(viewKey, defaultCols, currentUser, canPublishLayouts) 
     return <span style={{color:T.primary,fontSize:10,marginLeft:4}}>{sortDir==="asc"?"↑":"↓"}</span>;
   };
 
+  // Dynamic label: use shortLabel when column is narrow (< 120px), full label otherwise
+  const SHORT_THRESHOLD = 120;
+  function colLabel(col) {
+    if (col.shortLabel && col.width && col.width < SHORT_THRESHOLD) return col.shortLabel;
+    return col.label;
+  }
+
   const myLayouts    = layouts.filter(l => l.user_id === currentUser?.id);
   const sharedLayouts = layouts.filter(l => l.is_shared);
 
@@ -640,7 +647,7 @@ function useTableControls(viewKey, defaultCols, currentUser, canPublishLayouts) 
     </span>
   );
 
-  return { search, sortCol, sortDir, cols, filterAndSort, Toolbar, SortIcon, thDraggable, ResizeHandle };
+  return { search, sortCol, sortDir, cols, filterAndSort, Toolbar, SortIcon, thDraggable, ResizeHandle, colLabel };
 }
 
 // ── POSAO TABLE ───────────────────────────────────────────────────────────────
@@ -650,10 +657,10 @@ const POSAO_COLS_DEFAULT = [
   {key:"RokZaIsporuku",visible:true,label:"Rok isporuke"},{key:"Unosilac",visible:true,label:"Unosilac"},
   {key:"Opis",visible:true,label:"Opis"},{key:"PoslatiNaIzradu",visible:true,label:"Poslati"},
   {key:"MontazaIsporuka",visible:true,label:"Montaža/Isporuka"},{key:"Placanje",visible:true,label:"Plaćanje"},
-  {key:"StatusIzrade",visible:true,label:"Izrada",width:72},{key:"StatusIsporuke",visible:true,label:"Isporuka",width:78},
-  {key:"StatusMontaze",visible:true,label:"Montaža",width:76},{key:"SpecifikacijaCene",visible:true,label:"Specifikacija"},
-  {key:"Obracun",visible:true,label:"Obračun"},{key:"ZavrsenPosao",visible:true,label:"Završen",width:72},
-  {key:"Fakturisano",visible:false,label:"Fakt.",width:72},
+  {key:"StatusIzrade",visible:true,label:"Status izrade",shortLabel:"Izrada",width:72},{key:"StatusIsporuke",visible:true,label:"Status isporuke",shortLabel:"Isporuka",width:78},
+  {key:"StatusMontaze",visible:true,label:"Status montaže",shortLabel:"Montaža",width:76},{key:"SpecifikacijaCene",visible:true,label:"Specifikacija cene",shortLabel:"Specif."},
+  {key:"Obracun",visible:true,label:"Obračun (RSD)",shortLabel:"Obračun"},{key:"ZavrsenPosao",visible:true,label:"Završen posao",shortLabel:"Završen",width:72},
+  {key:"Fakturisano",visible:false,label:"Fakturisano",shortLabel:"Fakt.",width:72},
 ];
 
 function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZavrsen, onCopy, currentUser, canPublishLayouts}) {
@@ -694,7 +701,7 @@ function PosaoTable({rows, viewKey, canEdit, onView, onEdit, onDelete, onInlineZ
             <tr>
               {visibleCols.map(col=>(
                 <th key={col.key} {...ctrl.thDraggable(col)}>
-                  <span style={{display:"flex",alignItems:"center"}}>{col.label}<ctrl.SortIcon colKey={col.key}/></span>
+                  <span style={{display:"flex",alignItems:"center"}}>{ctrl.colLabel(col)}<ctrl.SortIcon colKey={col.key}/></span>
                   <ctrl.ResizeHandle colKey={col.key}/>
                 </th>
               ))}
@@ -748,7 +755,7 @@ function SimpleTable({rows, viewKey, columns, renderCell, emptyMsg="Nema zapisa"
           <thead><tr>
             {visibleCols.map(col=>(
               <th key={col.key} {...ctrl.thDraggable(col)}>
-                <span style={{display:"flex",alignItems:"center"}}>{col.label}<ctrl.SortIcon colKey={col.key}/></span>
+                <span style={{display:"flex",alignItems:"center"}}>{ctrl.colLabel(col)}<ctrl.SortIcon colKey={col.key}/></span>
                 <ctrl.ResizeHandle colKey={col.key}/>
               </th>
             ))}
@@ -793,7 +800,7 @@ function KupciView({kupci, canEdit, onNew, onEdit, onDelete, onView, currentUser
               <thead><tr>
                 {visibleCols.map(col=>(
                   <th key={col.key} {...ctrl.thDraggable(col)}>
-                    <span style={{display:"flex",alignItems:"center"}}>{col.label}<ctrl.SortIcon colKey={col.key}/></span>
+                    <span style={{display:"flex",alignItems:"center"}}>{ctrl.colLabel(col)}<ctrl.SortIcon colKey={col.key}/></span>
                     <ctrl.ResizeHandle colKey={col.key}/>
                   </th>
                 ))}
