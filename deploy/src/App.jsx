@@ -48,17 +48,17 @@ const appKupacToDB = k => ({
 
 // ── design tokens ─────────────────────────────────────────────────────────────
 const T = {
-  bg:"#0D1117", surface:"#161B22", surfaceHover:"#1C2330", surfaceRaised:"#1F2937",
-  border:"#30363D", borderStrong:"#484F58",
-  text:"#F0F6FF", textMid:"#B0BAC9", textSoft:"#6B7785",
-  primary:"#3B82F6", primaryHover:"#60A5FA",
-  primaryLight:"rgba(59,130,246,0.12)", primaryBorder:"rgba(59,130,246,0.35)",
-  green:"#34D399", greenBg:"rgba(52,211,153,0.10)", greenBorder:"rgba(52,211,153,0.30)",
-  amber:"#FBBF24", amberBg:"rgba(251,191,36,0.10)", amberBorder:"rgba(251,191,36,0.30)",
-  red:"#F87171",   redBg:"rgba(248,113,113,0.10)",  redBorder:"rgba(248,113,113,0.30)",
-  purple:"#A78BFA",purpleBg:"rgba(167,139,250,0.10)",purpleBorder:"rgba(167,139,250,0.30)",
-  shadow:"0 1px 3px rgba(0,0,0,0.30)", shadowMd:"0 4px 16px rgba(0,0,0,0.40)",
-  shadowLg:"0 24px 64px rgba(0,0,0,0.55), 0 8px 24px rgba(0,0,0,0.35)",
+  bg:"#F3F4F6", surface:"#FFFFFF", surfaceHover:"#F9FAFB", surfaceRaised:"#F3F4F6",
+  border:"#E5E7EB", borderStrong:"#D1D5DB",
+  text:"#111827", textMid:"#374151", textSoft:"#6B7280",
+  primary:"#2563EB", primaryHover:"#1D4ED8",
+  primaryLight:"rgba(37,99,235,0.08)", primaryBorder:"rgba(37,99,235,0.30)",
+  green:"#059669", greenBg:"rgba(5,150,105,0.08)", greenBorder:"rgba(5,150,105,0.25)",
+  amber:"#D97706", amberBg:"rgba(217,119,6,0.08)", amberBorder:"rgba(217,119,6,0.25)",
+  red:"#DC2626",   redBg:"rgba(220,38,38,0.07)",   redBorder:"rgba(220,38,38,0.25)",
+  purple:"#7C3AED",purpleBg:"rgba(124,58,237,0.08)",purpleBorder:"rgba(124,58,237,0.25)",
+  shadow:"0 1px 3px rgba(0,0,0,0.08)", shadowMd:"0 4px 16px rgba(0,0,0,0.10)",
+  shadowLg:"0 24px 64px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.08)",
   fontHead:"'Bricolage Grotesque', sans-serif", fontBody:"'Plus Jakarta Sans', sans-serif",
   radius:"10px", radiusSm:"7px", radiusLg:"14px",
 };
@@ -82,9 +82,9 @@ const montazaIsporukaOptions = ["Samo isporuka","Montaža i isporuka","Lično pr
 const placanjeOptions        = ["Faktura","Otpremnica","Zaduženje"];
 
 // ── shared styles ─────────────────────────────────────────────────────────────
-const thS = { padding:"10px 14px", textAlign:"left", color:T.text, fontSize:11,
+const thS = { padding:"10px 14px", textAlign:"left", color:T.textSoft, fontSize:11,
   textTransform:"uppercase", letterSpacing:"0.07em", fontWeight:700,
-  borderBottom:`1px solid ${T.border}`, whiteSpace:"nowrap", background:"#1C2330", fontFamily:T.fontBody };
+  borderBottom:`1px solid ${T.border}`, whiteSpace:"nowrap", background:T.surfaceRaised, fontFamily:T.fontBody };
 const tdS = { padding:"11px 14px", color:T.text, fontSize:13,
   borderBottom:`1px solid ${T.border}`, verticalAlign:"middle", fontFamily:T.fontBody,
   overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" };
@@ -148,7 +148,7 @@ function Field({label, value, onChange, type="text", options, readOnly, error}) 
   const commit = () => { prevValue.current = local; onChange(local); };
   const base = { width:"100%", background:readOnly?T.bg:T.surfaceRaised, border:`1px solid ${error?T.red:T.border}`,
     borderRadius:T.radiusSm, padding:"9px 12px", color:readOnly?T.textMid:T.text,
-    fontSize:13, fontFamily:T.fontBody, boxSizing:"border-box", outline:"none", colorScheme:"dark" };
+    fontSize:13, fontFamily:T.fontBody, boxSizing:"border-box", outline:"none", colorScheme:"light" };
   return (
     <div style={{marginBottom:14}}>
       <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:4,fontFamily:T.fontBody}}>{label}</label>
@@ -173,7 +173,7 @@ function DateField({label, value, onChange, readOnly, error}) {
     <div style={{marginBottom:14}}>
       <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:4,fontFamily:T.fontBody}}>{label}</label>
       <input type="date" value={value||""} onChange={e=>!readOnly&&onChange(e.target.value)} readOnly={readOnly}
-        style={{width:"100%",background:readOnly?T.bg:T.surfaceRaised,border:`1px solid ${error?T.red:T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:readOnly?T.textMid:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"dark"}}/>
+        style={{width:"100%",background:readOnly?T.bg:T.surfaceRaised,border:`1px solid ${error?T.red:T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:readOnly?T.textMid:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"light"}}/>
       {error && <div style={{color:T.red,fontSize:11,marginTop:3}}>{error}</div>}
     </div>
   );
@@ -228,7 +228,7 @@ function RadioGroup({label, value, onChange, options, readOnly}) {
 function UserSearchField({label, value, onChange, users}) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const base = {width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",colorScheme:"dark"};
+  const base = {width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",colorScheme:"light"};
   const filtered = users.filter(u => `${u.ime||""} ${u.prezime||""}`.toLowerCase().includes(search.toLowerCase()));
   return (
     <div style={{marginBottom:14,position:"relative"}}>
@@ -266,7 +266,7 @@ function UserSearchField({label, value, onChange, users}) {
 function KupacSearchField({label, sifra, naziv, kupci, onChange}) {
   const [open,setOpen]=useState(false);
   const [search,setSearch]=useState("");
-  const base={width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",colorScheme:"dark"};
+  const base={width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",colorScheme:"light"};
   const filtered=kupci.filter(k=>k.SifraKupca.toLowerCase().includes(search.toLowerCase())||k.Naziv.toLowerCase().includes(search.toLowerCase())||k.Grad.toLowerCase().includes(search.toLowerCase()));
   const display=sifra?`${sifra} — ${naziv}`:"";
   return (
@@ -505,7 +505,7 @@ function useTableControls(viewKey, defaultCols, currentUser, canPublishLayouts) 
             onBlur={e=>commit(e.target.value)}
             onKeyDown={e=>{ if(e.key==="Enter"||e.key==="Tab")commit(localSearch); if(e.key==="Escape"){setLocalSearch("");commit("");} }}
             placeholder="Pretraži... (Enter)"
-            style={{width:"100%",background:T.surfaceRaised,border:`1px solid ${localSearch?T.primaryBorder:T.border}`,borderRadius:T.radiusSm,padding:"7px 12px 7px 32px",color:T.text,fontSize:13,fontFamily:T.fontBody,outline:"none",boxSizing:"border-box",colorScheme:"dark"}}/>
+            style={{width:"100%",background:T.surfaceRaised,border:`1px solid ${localSearch?T.primaryBorder:T.border}`,borderRadius:T.radiusSm,padding:"7px 12px 7px 32px",color:T.text,fontSize:13,fontFamily:T.fontBody,outline:"none",boxSizing:"border-box",colorScheme:"light"}}/>
           {localSearch&&<button onClick={()=>{setLocalSearch("");commit("");}} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:T.textSoft,cursor:"pointer",fontSize:14}}>×</button>}
         </div>
         <div style={{position:"relative"}}>
@@ -586,7 +586,7 @@ function useTableControls(viewKey, defaultCols, currentUser, canPublishLayouts) 
                 <input value={layoutName} onChange={e=>setLayoutName(e.target.value)}
                   onKeyDown={e=>e.key==="Enter"&&saveLayout()}
                   placeholder="npr. Moj pregled" autoFocus
-                  style={{width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"dark"}}/>
+                  style={{width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,padding:"9px 12px",color:T.text,fontSize:13,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"light"}}/>
               </div>
               <label style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,cursor:"pointer"}}>
                 <input type="checkbox" checked={saveAsDefault} onChange={e=>setSaveAsDefault(e.target.checked)} style={{accentColor:T.amber,width:15,height:15}}/>
@@ -852,12 +852,12 @@ function LoginScreen({onLogin}) {
     onLogin(data.user);
   }
 
-  const inp={width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"11px 14px",color:T.text,fontSize:14,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"dark"};
+  const inp={width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"11px 14px",color:T.text,fontSize:14,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"light"};
   return (
-    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0D1117 0%,#111827 50%,#0F172A 100%)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:T.fontBody}}>
+    <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:T.fontBody}}>
 
-      <div style={{position:"fixed",top:-120,right:-120,width:400,height:400,background:"radial-gradient(circle,rgba(59,130,246,0.18) 0%,transparent 70%)",borderRadius:"50%",pointerEvents:"none"}}/>
-      <div style={{position:"fixed",bottom:-80,left:-80,width:300,height:300,background:"radial-gradient(circle,rgba(167,139,250,0.14) 0%,transparent 70%)",borderRadius:"50%",pointerEvents:"none"}}/>
+      
+      
       <div style={{background:T.surface,borderRadius:T.radiusLg,padding:"40px 44px",width:400,boxShadow:T.shadowLg,border:`1px solid ${T.border}`,position:"relative"}}>
         <div style={{marginBottom:32}}>
           <div style={{display:"inline-flex",alignItems:"center",gap:8,background:T.primaryLight,border:`1px solid ${T.primaryBorder}`,borderRadius:T.radius,padding:"6px 12px",marginBottom:18}}>
@@ -896,7 +896,7 @@ function ObracunView({poslovi, placanjeColor}) {
   const chartRef = useRef(null);
 
   const inp = {background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radiusSm,
-    padding:"7px 11px",color:T.text,fontSize:13,fontFamily:T.fontBody,outline:"none",colorScheme:"dark",boxSizing:"border-box"};
+    padding:"7px 11px",color:T.text,fontSize:13,fontFamily:T.fontBody,outline:"none",colorScheme:"light",boxSizing:"border-box"};
 
   // Filter by date
   const filtered = useMemo(() => {
@@ -1283,7 +1283,7 @@ function ChangelogView() {
   const selStyle = {
     background:T.surfaceRaised, border:`1px solid ${T.border}`, borderRadius:T.radiusSm,
     color:T.textMid, fontSize:12, padding:"6px 10px", fontFamily:T.fontBody,
-    cursor:"pointer", outline:"none", colorScheme:"dark",
+    cursor:"pointer", outline:"none", colorScheme:"light",
   };
 
   // Renders the expandable changes diff block
@@ -1459,7 +1459,7 @@ function ChangelogView() {
                 {["Datum i vreme","Korisnik","Akcija","Entitet","Zapis","Izmene"].map(h=>(
                   <th key={h} style={{padding:"9px 12px",textAlign:"left",color:T.textSoft,
                     fontSize:10,textTransform:"uppercase",letterSpacing:"0.07em",fontWeight:700,
-                    borderBottom:`1px solid ${T.border}`,background:"#1C2330",whiteSpace:"nowrap"}}>
+                    borderBottom:`1px solid ${T.border}`,background:T.surfaceRaised,whiteSpace:"nowrap"}}>
                     {h}
                   </th>
                 ))}
@@ -1731,7 +1731,7 @@ function ManualView({ profile }) {
           <tr>{cols.map((c,i)=>(
             <th key={i} style={{padding:"6px 10px",textAlign:"left",color:T.textSoft,
               fontSize:9,textTransform:"uppercase",letterSpacing:"0.07em",fontWeight:700,
-              borderBottom:`1px solid ${T.border}`,background:"#1C2330",whiteSpace:"nowrap"}}>
+              borderBottom:`1px solid ${T.border}`,background:T.surfaceRaised,whiteSpace:"nowrap"}}>
               {c} <span style={{opacity:.4}}>↕</span>
             </th>
           ))}</tr>
@@ -2010,8 +2010,8 @@ function ManualView({ profile }) {
     <div style={{overflowX:"auto",borderRadius:T.radiusSm,border:`1px solid ${T.border}`}}>
       <table style={{width:"100%",borderCollapse:"collapse",background:T.surface,fontSize:11,fontFamily:T.fontBody}}>
         <thead><tr>
-          <th style={{padding:"6px 10px",textAlign:"left",color:T.textSoft,fontSize:9,textTransform:"uppercase",letterSpacing:".07em",fontWeight:700,borderBottom:`1px solid ${T.border}`,background:"#1C2330"}}>Kartica</th>
-          <th style={{padding:"6px 10px",textAlign:"left",color:T.textSoft,fontSize:9,textTransform:"uppercase",letterSpacing:".07em",fontWeight:700,borderBottom:`1px solid ${T.border}`,background:"#1C2330"}}>Dozvola</th>
+          <th style={{padding:"6px 10px",textAlign:"left",color:T.textSoft,fontSize:9,textTransform:"uppercase",letterSpacing:".07em",fontWeight:700,borderBottom:`1px solid ${T.border}`,background:T.surfaceRaised}}>Kartica</th>
+          <th style={{padding:"6px 10px",textAlign:"left",color:T.textSoft,fontSize:9,textTransform:"uppercase",letterSpacing:".07em",fontWeight:700,borderBottom:`1px solid ${T.border}`,background:T.surfaceRaised}}>Dozvola</th>
         </tr></thead>
         <tbody>
           {[["📋 Poslovi","edit",T.green,T.greenBg,T.greenBorder],
@@ -2584,7 +2584,7 @@ function ManualView({ profile }) {
         <div style={{overflowX:"auto",borderRadius:T.radiusSm,border:`1px solid ${T.border}`}}>
           <table style={{width:"100%",borderCollapse:"collapse",background:T.surface,fontSize:11,fontFamily:T.fontBody}}>
             <thead><tr>{["Plaćanje","Broj poslova","Ukupan obračun"].map((h,i)=>(
-              <th key={i} style={{padding:"6px 12px",textAlign:"left",color:T.textSoft,fontSize:9,textTransform:"uppercase",letterSpacing:".07em",fontWeight:700,borderBottom:`1px solid ${T.border}`,background:"#1C2330"}}>{h}</th>
+              <th key={i} style={{padding:"6px 12px",textAlign:"left",color:T.textSoft,fontSize:9,textTransform:"uppercase",letterSpacing:".07em",fontWeight:700,borderBottom:`1px solid ${T.border}`,background:T.surfaceRaised}}>{h}</th>
             ))}</tr></thead>
             <tbody>
               {[["Faktura",T.primary,12,"8.640.000"],["Otpremnica",T.amber,5,"2.100.000"],["Zaduženje",T.purple,3,"960.000"]].map(([t,c,n,s],i)=>(
