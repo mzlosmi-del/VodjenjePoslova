@@ -2875,7 +2875,12 @@ export default function App() {
   const knjigenjeRows = useMemo(()=>poslovi.filter(p=>p.ZavrsenPosao&&p.Placanje==="Faktura"),[poslovi]);
 
   const perm    = tab => profile?.tab_permissions?.[tab]||"none";
-  const canSee  = tab => tab==="uputstvo" || (tab==="changelog" && profile?.is_admin) || perm(tab)!=="none";
+  const hasAnyPerm = ALL_TABS.some(t => t.key !== "uputstvo" && t.key !== "changelog" && perm(t.key) !== "none");
+  const canSee  = tab => {
+    if (tab === "changelog") return profile?.is_admin || false;
+    if (tab === "uputstvo")  return profile?.is_admin || hasAnyPerm;
+    return perm(tab) !== "none";
+  };
   const canEdit = tab => perm(tab)==="edit";
   const tf = k => v => setTempData(d=>({...d,[k]:v}));
 
