@@ -358,10 +358,11 @@ function useTableControls(viewKey, defaultCols, currentUser, canPublishLayouts) 
         .order("created_at", { ascending: true });
       if (data) {
         setLayouts(data);
-        // Priority: user's own default > shared layout > nothing
-        const myDefault = data.find(l => l.user_id === currentUser.id && l.is_default);
-        const shared    = data.find(l => l.is_shared);
-        const toApply   = myDefault || shared;
+        // Priority: user's own default > shared+default > any shared > nothing
+        const myDefault     = data.find(l => l.user_id === currentUser.id && l.is_default);
+        const sharedDefault = data.find(l => l.is_shared && l.is_default);
+        const anyShared     = data.find(l => l.is_shared);
+        const toApply       = myDefault || sharedDefault || anyShared;
         if (toApply) setCols(toApply.cols);
       }
       setLayoutsLoaded(true);
