@@ -3067,7 +3067,12 @@ export default function App() {
         .map(([k,lbl]) => ({ field:k, label:lbl, old:fmtVal(prev[k]), new:fmtVal(tempData[k]) }));
       await writeLog({ entity_type:"korisnik", entity_id:editingUser, entity_label:`${tempData.ime} ${tempData.prezime}`.trim(), action:"update", changes });
     }
-    await loadUsers(); closeModal();
+    await loadUsers();
+    // If the admin edited another user's profile, that user's permissions are
+    // now updated in the DB. If the admin edited their OWN profile, also
+    // refresh the live profile state so canSee/canEdit/perm() update immediately.
+    if (editingUser === authUser?.id) await loadProfile(authUser.id);
+    closeModal();
   }
 
   async function confirmDeleteAction() {
@@ -3157,7 +3162,7 @@ export default function App() {
           </div>
           <nav style={{display:"flex",gap:1,flex:1,overflowX:"auto"}}>
             {visibleTabs.map(t=>(
-              <button key={t.key} onClick={()=>{setView(t.key);sessionStorage.setItem("lastView",t.key);}} style={{
+              <button key={t.key} onClick={()=>{setView(t.key);sessionStorage.setItem("lastView",t.key);if(authUser)loadProfile(authUser.id);}} style={{
                 background:view===t.key?T.primaryLight:"none",border:"none",
                 color:view===t.key?T.primary:T.textSoft,borderRadius:T.radiusSm,
                 padding:"5px 12px",cursor:"pointer",fontSize:12,fontWeight:view===t.key?600:400,
