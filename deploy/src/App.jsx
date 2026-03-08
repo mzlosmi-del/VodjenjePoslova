@@ -2874,6 +2874,20 @@ export default function App() {
   const isporukaRows  = useMemo(()=>poslovi.filter(p=>p.MontazaIsporuka==="Samo isporuka"||p.MontazaIsporuka==="Montaža i isporuka"),[poslovi]);
   const knjigenjeRows = useMemo(()=>poslovi.filter(p=>p.ZavrsenPosao&&p.Placanje==="Faktura"),[poslovi]);
 
+  // Status filter for radionica/montaza/isporuka/knjizenje — default "open" only
+  const [showOnlyOpen, setShowOnlyOpen] = useState(() => {
+    const saved = sessionStorage.getItem("statusFilter");
+    return saved === null ? true : saved === "true";
+  });
+  function toggleStatusFilter(val) {
+    setShowOnlyOpen(val);
+    sessionStorage.setItem("statusFilter", String(val));
+  }
+  const radionicaFiltered = useMemo(() => showOnlyOpen ? poslovi.filter(p=>!p.StatusIzrade)   : poslovi,          [poslovi, showOnlyOpen]);
+  const montazaFiltered   = useMemo(() => showOnlyOpen ? montazaRows.filter(p=>!p.StatusMontaze)  : montazaRows,  [montazaRows, showOnlyOpen]);
+  const isporukaFiltered  = useMemo(() => showOnlyOpen ? isporukaRows.filter(p=>!p.StatusIsporuke): isporukaRows, [isporukaRows, showOnlyOpen]);
+  const knjigenjeFiltered = useMemo(() => showOnlyOpen ? knjigenjeRows.filter(p=>!p.Fakturisano)  : knjigenjeRows,[knjigenjeRows, showOnlyOpen]);
+
   const perm    = tab => profile?.tab_permissions?.[tab]||"none";
   const hasAnyPerm = ALL_TABS.some(t => t.key !== "uputstvo" && t.key !== "changelog" && perm(t.key) !== "none");
   const canSee  = tab => {
@@ -3224,34 +3238,90 @@ export default function App() {
 
         {view==="radionica" && <>
           <PageHeader title="Radionica" subtitle="Status izrade se menja samo ovde"/>
-          <SimpleTable rows={poslovi} viewKey="radionica"
+                    <div style={{display:"flex",gap:6,marginBottom:14,alignItems:"center"}}>
+            <span style={{fontSize:12,color:T.textSoft,fontFamily:T.fontBody,marginRight:4}}>Prikaži:</span>
+            {[["open","Samo otvoreni"],["all","Svi"]].map(([val,lbl])=>(
+              <button key={val} onClick={()=>toggleStatusFilter(val==="open")}
+                style={{...btnS("ghost"),padding:"5px 14px",fontSize:12,
+                  background:showOnlyOpen===(val==="open")?T.primaryLight:"none",
+                  border:`1px solid ${showOnlyOpen===(val==="open")?T.primaryBorder:T.border}`,
+                  color:showOnlyOpen===(val==="open")?T.primary:T.textMid,fontWeight:showOnlyOpen===(val==="open")?600:400}}>
+                {lbl}
+              </button>
+            ))}
+            <span style={{fontSize:12,color:T.textSoft,fontFamily:T.fontBody,marginLeft:6}}>
+            </span>
+          </div>
+          <SimpleTable rows={radionicaFiltered} viewKey="radionica"
             columns={simpleCols([["Posao","Posao"],["KLIJENT","Klijent"],["SifraKupca","Šifra"],["DatumUnosa","Datum"],["RokZaIsporuku","Rok"],["Unosilac","Unosilac"],["Opis","Opis"],["StatusIzrade","Status izrade"]])}
             renderCell={simpleRender("StatusIzrade",p=><InlineCheck val={p.StatusIzrade} onChange={v=>canEdit("radionica")&&inlineUpdate(p.id,"StatusIzrade",v)} disabled={!canEdit("radionica")}/>)} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
         {view==="montaza" && <>
           <PageHeader title="Montaža" subtitle="Status montaže se menja samo ovde"/>
-          <SimpleTable rows={montazaRows} viewKey="montaza"
+                    <div style={{display:"flex",gap:6,marginBottom:14,alignItems:"center"}}>
+            <span style={{fontSize:12,color:T.textSoft,fontFamily:T.fontBody,marginRight:4}}>Prikaži:</span>
+            {[["open","Samo otvoreni"],["all","Svi"]].map(([val,lbl])=>(
+              <button key={val} onClick={()=>toggleStatusFilter(val==="open")}
+                style={{...btnS("ghost"),padding:"5px 14px",fontSize:12,
+                  background:showOnlyOpen===(val==="open")?T.primaryLight:"none",
+                  border:`1px solid ${showOnlyOpen===(val==="open")?T.primaryBorder:T.border}`,
+                  color:showOnlyOpen===(val==="open")?T.primary:T.textMid,fontWeight:showOnlyOpen===(val==="open")?600:400}}>
+                {lbl}
+              </button>
+            ))}
+            <span style={{fontSize:12,color:T.textSoft,fontFamily:T.fontBody,marginLeft:6}}>
+            </span>
+          </div>
+          <SimpleTable rows={montazaFiltered} viewKey="montaza"
             columns={simpleCols([["Posao","Posao"],["KLIJENT","Klijent"],["SifraKupca","Šifra"],["DatumUnosa","Datum"],["RokZaIsporuku","Rok"],["Unosilac","Unosilac"],["Opis","Opis"],["StatusMontaze","Status montaže"]])}
             renderCell={simpleRender("StatusMontaze",p=><InlineCheck val={p.StatusMontaze} onChange={v=>canEdit("montaza")&&inlineUpdate(p.id,"StatusMontaze",v)} disabled={!canEdit("montaza")}/>)} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
         {view==="isporuka" && <>
           <PageHeader title="Isporuka" subtitle="Status isporuke se menja samo ovde"/>
-          <SimpleTable rows={isporukaRows} viewKey="isporuka"
+                    <div style={{display:"flex",gap:6,marginBottom:14,alignItems:"center"}}>
+            <span style={{fontSize:12,color:T.textSoft,fontFamily:T.fontBody,marginRight:4}}>Prikaži:</span>
+            {[["open","Samo otvoreni"],["all","Svi"]].map(([val,lbl])=>(
+              <button key={val} onClick={()=>toggleStatusFilter(val==="open")}
+                style={{...btnS("ghost"),padding:"5px 14px",fontSize:12,
+                  background:showOnlyOpen===(val==="open")?T.primaryLight:"none",
+                  border:`1px solid ${showOnlyOpen===(val==="open")?T.primaryBorder:T.border}`,
+                  color:showOnlyOpen===(val==="open")?T.primary:T.textMid,fontWeight:showOnlyOpen===(val==="open")?600:400}}>
+                {lbl}
+              </button>
+            ))}
+            <span style={{fontSize:12,color:T.textSoft,fontFamily:T.fontBody,marginLeft:6}}>
+            </span>
+          </div>
+          <SimpleTable rows={isporukaFiltered} viewKey="isporuka"
             columns={simpleCols([["Posao","Posao"],["KLIJENT","Klijent"],["SifraKupca","Šifra"],["DatumUnosa","Datum"],["RokZaIsporuku","Rok"],["Unosilac","Unosilac"],["Opis","Opis"],["StatusIsporuke","Status isporuke"]])}
             renderCell={simpleRender("StatusIsporuke",p=><InlineCheck val={p.StatusIsporuke} onChange={v=>canEdit("isporuka")&&inlineUpdate(p.id,"StatusIsporuke",v)} disabled={!canEdit("isporuka")}/>)} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
         {view==="knjizenje" && <>
           <PageHeader title="Knjiženje" subtitle="Završeni · Faktura · Fakturisano se menja ovde"/>
-          <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap"}}>
-            <StatCard label="Za knjiženje" value={knjigenjeRows.length} color={T.primary}/>
-            <StatCard label="Fakturisano" value={knjigenjeRows.filter(p=>p.Fakturisano).length} color={T.green}/>
-            <StatCard label="Nije fakt." value={knjigenjeRows.filter(p=>!p.Fakturisano).length} color={T.amber}/>
-            <StatCard label="Ukupan obračun" value={knjigenjeRows.reduce((s,p)=>s+(parseFloat(p.Obracun)||0),0).toLocaleString()+" RSD"} color={T.textMid}/>
+                    <div style={{display:"flex",gap:6,marginBottom:14,alignItems:"center"}}>
+            <span style={{fontSize:12,color:T.textSoft,fontFamily:T.fontBody,marginRight:4}}>Prikaži:</span>
+            {[["open","Samo otvoreni"],["all","Svi"]].map(([val,lbl])=>(
+              <button key={val} onClick={()=>toggleStatusFilter(val==="open")}
+                style={{...btnS("ghost"),padding:"5px 14px",fontSize:12,
+                  background:showOnlyOpen===(val==="open")?T.primaryLight:"none",
+                  border:`1px solid ${showOnlyOpen===(val==="open")?T.primaryBorder:T.border}`,
+                  color:showOnlyOpen===(val==="open")?T.primary:T.textMid,fontWeight:showOnlyOpen===(val==="open")?600:400}}>
+                {lbl}
+              </button>
+            ))}
+            <span style={{fontSize:12,color:T.textSoft,fontFamily:T.fontBody,marginLeft:6}}>
+            </span>
           </div>
-          <SimpleTable rows={knjigenjeRows} viewKey="knjizenje"
+          <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap"}}>
+            <StatCard label="Za knjiženje" value={knjigenjeFiltered.length} color={T.primary}/>
+            <StatCard label="Fakturisano" value={knjigenjeFiltered.filter(p=>p.Fakturisano).length} color={T.green}/>
+            <StatCard label="Nije fakt." value={knjigenjeFiltered.filter(p=>!p.Fakturisano).length} color={T.amber}/>
+            <StatCard label="Ukupan obračun" value={knjigenjeFiltered.reduce((s,p)=>s+(parseFloat(p.Obracun)||0),0).toLocaleString()+" RSD"} color={T.textMid}/>
+          </div>
+          <SimpleTable rows={knjigenjeFiltered} viewKey="knjizenje"
             columns={simpleCols([["Posao","Posao"],["KLIJENT","Klijent"],["SifraKupca","Šifra"],["DatumUnosa","Datum"],["Opis","Opis"],["SpecifikacijaCene","Specifikacija"],["Obracun","Obračun"],["Fakturisano","Fakturisano"]])}
             renderCell={(p,key)=>{
               if (key==="Posao") return <span style={{color:T.primary,fontWeight:700}}>{p.Posao}</span>;
