@@ -2337,8 +2337,9 @@ function ManualView({ profile }) {
     const edit = canEditTab("radionica");
     return (
       <>
-        <P>Kartica <strong style={{color:T.text}}>🔧 Radionica</strong> prikazuje <em>sve</em> poslove (i aktivne i završene) i namenjena je isključivo za evidentiranje fizičke izrade u radionici.</P>
+        <P>Kartica <strong style={{color:T.text}}>🔧 Radionica</strong> prikazuje poslove i namenjena je isključivo za evidentiranje fizičke izrade u radionici.</P>
         <Warn>Status izrade se menja <strong>samo ovde</strong> — direktnim klikom na kvačicu u tabeli. U formi za uređivanje posla taj status se prikazuje samo informativno i nije moguće menjati ga odande.</Warn>
+        <Note>Na vrhu kartice nalaze se dugmad <strong style={{color:T.text}}>Samo otvoreni</strong> i <strong style={{color:T.text}}>Svi</strong>. Podrazumevano se prikazuju samo poslovi kod kojih status izrade <strong>nije</strong> označen — tj. izrada još nije završena. Izborom <em>Svi</em> prikazuju se i završeni i nezavršeni poslovi.</Note>
 
         <H3>Tabela radionice</H3>
         <Frame label="Tabela Radionica sa inline promenama statusa">
@@ -2371,6 +2372,7 @@ function ManualView({ profile }) {
         <P>Kartica <strong style={{color:T.text}}>🏗 Montaža</strong> prikazuje samo poslove kojima je tip isporuke <strong style={{color:T.primary}}>Montaža i isporuka</strong>. Namenjena je praćenju da li je montaža na terenu obavljena.</P>
         <Warn>Status montaže se menja <strong>samo ovde</strong> — direktnim klikom na kvačicu u koloni Status montaže.</Warn>
         <Note>Poslovi sa tipom isporuke <em>Samo isporuka</em> ili <em>Lično preuzimanje</em> <strong>nisu vidljivi</strong> u ovoj kartici.</Note>
+        <Note>Na vrhu kartice nalaze se dugmad <strong style={{color:T.text}}>Samo otvoreni</strong> i <strong style={{color:T.text}}>Svi</strong>. Podrazumevano se prikazuju samo poslovi kod kojih montaža <strong>nije</strong> završena. Izborom <em>Svi</em> prikazuju se i završene i nezavršene montaže.</Note>
 
         <H3>Tabela montaže</H3>
         <Frame label="Tabela Montaža">
@@ -2403,6 +2405,7 @@ function ManualView({ profile }) {
         <P>Kartica <strong style={{color:T.text}}>🚚 Isporuka</strong> prikazuje poslove kojima je tip isporuke <strong style={{color:T.green}}>Samo isporuka</strong> ili <strong style={{color:T.primary}}>Montaža i isporuka</strong>. Ovde se evidentira da li je roba fizički isporučena kupcu.</P>
         <Warn>Status isporuke se menja <strong>samo ovde</strong> — direktnim klikom na kvačicu u koloni Status isporuke.</Warn>
         <Note>Poslovi sa tipom isporuke <em>Lično preuzimanje</em> <strong>nisu vidljivi</strong> u ovoj kartici.</Note>
+        <Note>Na vrhu kartice nalaze se dugmad <strong style={{color:T.text}}>Samo otvoreni</strong> i <strong style={{color:T.text}}>Svi</strong>. Podrazumevano se prikazuju samo poslovi kod kojih isporuka <strong>nije</strong> evidentirana. Izborom <em>Svi</em> prikazuju se i isporučeni i neisporučeni poslovi.</Note>
 
         <H3>Tabela isporuke</H3>
         <Frame label="Tabela Isporuka">
@@ -2434,6 +2437,7 @@ function ManualView({ profile }) {
       <>
         <P>Kartica <strong style={{color:T.text}}>📒 Knjiženje</strong> prikazuje završene poslove sa načinom plaćanja <strong style={{color:T.primary}}>Faktura</strong>. Ovde se evidentira da li je svaka faktura proknjižena u računovodstvenom sistemu.</P>
         <Note>U ovoj kartici prikazuju se <strong>isključivo</strong> završeni poslovi sa plaćanjem 'Faktura". Otpremnice i zaduženja ovde nisu vidljivi.</Note>
+        <Note>Na vrhu kartice nalaze se dugmad <strong style={{color:T.text}}>Samo otvoreni</strong> i <strong style={{color:T.text}}>Svi</strong>. Podrazumevano se prikazuju samo fakture koje <strong>nisu</strong> još fakturisane. Izborom <em>Svi</em> prikazuju se i fakturisane i nefakturisane stavke. Statistike na vrhu uvek odražavaju trenutno prikazane redove.</Note>
 
         <H3>Statistike knjiženja</H3>
         <Frame label="Kartice sa statistikama knjiženja">
