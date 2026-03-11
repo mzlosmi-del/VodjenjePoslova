@@ -2865,7 +2865,7 @@ export default function App() {
   const [globalErr,setGlobalErr]     = useState("");
   const [globalSuccess,setGlobalSuccess] = useState("");
   const [changingPassword,setChangingPassword] = useState(false);
-  const [newPwData,setNewPwData] = useState({pw:"",pw2:"",showPw:false,loading:false,error:"",success:""});
+  const [newPwData,setNewPwData] = useState({step:"reauth",currentPw:"",pw:"",pw2:"",showPw:false,showCurrent:false,loading:false,error:"",success:""});
 
   // Detect password-reset token in URL (Supabase redirects here after reset email click)
   useEffect(()=>{
@@ -3599,36 +3599,62 @@ export default function App() {
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2100,backdropFilter:"blur(6px)",padding:16}}>
           <div style={{background:T.surface,borderRadius:T.radiusLg,padding:"36px 40px",maxWidth:420,width:"100%",boxShadow:T.shadowLg,border:`1px solid ${T.border}`}}>
             <h3 style={{color:T.text,fontFamily:T.fontHead,margin:"0 0 6px",fontSize:20,fontWeight:700}}>🔑 Promena lozinke</h3>
-            <p style={{color:T.textSoft,fontSize:13,margin:"0 0 22px"}}>Unesite novu lozinku za vaš nalog.</p>
-            {[["Nova lozinka","pw"],["Potvrdi lozinku","pw2"]].map(([lbl,key])=>(
-              <div key={key} style={{marginBottom:16}}>
-                <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:5}}>{lbl}</label>
+
+            {newPwData.step==="reauth" ? (<>
+              <p style={{color:T.textSoft,fontSize:13,margin:"0 0 22px"}}>Iz bezbednosnih razloga, najpre potvrdite trenutnu lozinku.</p>
+              <div style={{marginBottom:16}}>
+                <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:5}}>Trenutna lozinka</label>
                 <div style={{position:"relative"}}>
-                  <input
-                    type={newPwData.showPw?"text":"password"}
-                    value={newPwData[key]}
-                    onChange={e=>setNewPwData(d=>({...d,[key]:e.target.value,error:"",success:""}))}
+                  <input type={newPwData.showCurrent?"text":"password"} value={newPwData.currentPw}
+                    onChange={e=>setNewPwData(d=>({...d,currentPw:e.target.value,error:""}))}
+                    onKeyDown={async e=>{if(e.key==="Enter") document.getElementById("pw-reauth-btn")?.click();}}
                     style={{width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"11px 44px 11px 14px",color:T.text,fontSize:14,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"light"}}/>
-                  {key==="pw" && <button onClick={()=>setNewPwData(d=>({...d,showPw:!d.showPw}))} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:T.textSoft,cursor:"pointer",fontSize:16}}>{newPwData.showPw?"🙈":"👁"}</button>}
+                  <button onClick={()=>setNewPwData(d=>({...d,showCurrent:!d.showCurrent}))} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:T.textSoft,cursor:"pointer",fontSize:16}}>{newPwData.showCurrent?"🙈":"👁"}</button>
                 </div>
               </div>
-            ))}
-            <ErrBanner msg={newPwData.error}/>
-            <SuccessBanner msg={newPwData.success}/>
-            <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
-              <button onClick={()=>{setChangingPassword(false);setNewPwData({pw:"",pw2:"",showPw:false,loading:false,error:"",success:""});window.location.hash="";}} style={btnS("ghost")}>Zatvori</button>
-              <button disabled={newPwData.loading} onClick={async()=>{
-                if (newPwData.pw.length < 6) { setNewPwData(d=>({...d,error:"Lozinka mora imati najmanje 6 karaktera."})); return; }
-                if (newPwData.pw !== newPwData.pw2) { setNewPwData(d=>({...d,error:"Lozinke se ne poklapaju."})); return; }
-                setNewPwData(d=>({...d,loading:true,error:"",success:""}));
-                const {error:e} = await sb.auth.updateUser({password:newPwData.pw});
-                if (e) { setNewPwData(d=>({...d,loading:false,error:e.message})); return; }
-                setNewPwData(d=>({...d,loading:false,success:"Lozinka je uspešno promenjena!"}));
-                setTimeout(()=>{setChangingPassword(false);setNewPwData({pw:"",pw2:"",showPw:false,loading:false,error:"",success:""});window.location.hash="";},1800);
-              }} style={{...btnS("primary"),opacity:newPwData.loading?0.6:1}}>
-                {newPwData.loading?"Menja...":"Sačuvaj lozinku"}
-              </button>
-            </div>
+              <ErrBanner msg={newPwData.error}/>
+              <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
+                <button onClick={()=>{setChangingPassword(false);setNewPwData({step:"reauth",currentPw:"",pw:"",pw2:"",showPw:false,showCurrent:false,loading:false,error:"",success:""});window.location.hash="";}} style={btnS("ghost")}>Otkaži</button>
+                <button id="pw-reauth-btn" disabled={newPwData.loading} onClick={async()=>{
+                  if (!newPwData.currentPw) { setNewPwData(d=>({...d,error:"Unesite trenutnu lozinku."})); return; }
+                  setNewPwData(d=>({...d,loading:true,error:""}));
+                  const {error:e} = await sb.auth.signInWithPassword({email:authUser.email, password:newPwData.currentPw});
+                  if (e) { setNewPwData(d=>({...d,loading:false,error:"Pogrešna lozinka."})); return; }
+                  setNewPwData(d=>({...d,loading:false,step:"newpw",currentPw:""}));
+                }} style={{...btnS("primary"),opacity:newPwData.loading?0.6:1}}>
+                  {newPwData.loading?"Proverava...":"Potvrdi →"}
+                </button>
+              </div>
+            </>) : (<>
+              <p style={{color:T.textSoft,fontSize:13,margin:"0 0 22px"}}>Unesite novu lozinku za vaš nalog.</p>
+              {[["Nova lozinka","pw"],["Potvrdi lozinku","pw2"]].map(([lbl,key])=>(
+                <div key={key} style={{marginBottom:16}}>
+                  <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:5}}>{lbl}</label>
+                  <div style={{position:"relative"}}>
+                    <input type={newPwData.showPw?"text":"password"} value={newPwData[key]}
+                      onChange={e=>setNewPwData(d=>({...d,[key]:e.target.value,error:"",success:""}))}
+                      style={{width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"11px 44px 11px 14px",color:T.text,fontSize:14,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"light"}}/>
+                    {key==="pw" && <button onClick={()=>setNewPwData(d=>({...d,showPw:!d.showPw}))} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:T.textSoft,cursor:"pointer",fontSize:16}}>{newPwData.showPw?"🙈":"👁"}</button>}
+                  </div>
+                </div>
+              ))}
+              <ErrBanner msg={newPwData.error}/>
+              <SuccessBanner msg={newPwData.success}/>
+              <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
+                <button onClick={()=>{setChangingPassword(false);setNewPwData({step:"reauth",currentPw:"",pw:"",pw2:"",showPw:false,showCurrent:false,loading:false,error:"",success:""});window.location.hash="";}} style={btnS("ghost")}>Otkaži</button>
+                <button disabled={newPwData.loading} onClick={async()=>{
+                  if (newPwData.pw.length < 6) { setNewPwData(d=>({...d,error:"Lozinka mora imati najmanje 6 karaktera."})); return; }
+                  if (newPwData.pw !== newPwData.pw2) { setNewPwData(d=>({...d,error:"Lozinke se ne poklapaju."})); return; }
+                  setNewPwData(d=>({...d,loading:true,error:"",success:""}));
+                  const {error:e} = await sb.auth.updateUser({password:newPwData.pw});
+                  if (e) { setNewPwData(d=>({...d,loading:false,error:e.message})); return; }
+                  setNewPwData(d=>({...d,loading:false,success:"Lozinka je uspešno promenjena!"}));
+                  setTimeout(()=>{setChangingPassword(false);setNewPwData({step:"reauth",currentPw:"",pw:"",pw2:"",showPw:false,showCurrent:false,loading:false,error:"",success:""});window.location.hash="";},1800);
+                }} style={{...btnS("primary"),opacity:newPwData.loading?0.6:1}}>
+                  {newPwData.loading?"Menja...":"Sačuvaj lozinku"}
+                </button>
+              </div>
+            </>)}
           </div>
         </div>
       )}
