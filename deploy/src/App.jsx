@@ -2889,11 +2889,15 @@ export default function App() {
     });
     const {data:{subscription}} = sb.auth.onAuthStateChange((event,session)=>{
       if (event==="PASSWORD_RECOVERY") {
-        // User clicked the reset link in their email — show the new-password form
+        // User clicked the reset link — check if MFA is enabled to decide which step to show
         setAuthUser(session.user);
-        setNewPwData(d=>({...d,step:"recovery"}));
-        setChangingPassword(true);
         loadProfile(session.user.id);
+        // Check AAL level: if nextLevel is aal2, user has MFA and needs TOTP before password change
+        sb.auth.mfa.getAuthenticatorAssuranceLevel().then(({data})=>{
+          const needsMfa = data?.nextLevel==="aal2" && data?.currentLevel!=="aal2";
+          setNewPwData(d=>({...d,step:needsMfa?"recovery-totp":"recovery"}));
+          setChangingPassword(true);
+        });
         return;
       }
       if (session?.user) { setAuthUser(session.user); loadProfile(session.user.id); }
@@ -3598,6 +3602,38 @@ export default function App() {
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2100,backdropFilter:"blur(6px)",padding:16}}>
           <div style={{background:T.surface,borderRadius:T.radiusLg,padding:"36px 40px",maxWidth:420,width:"100%",boxShadow:T.shadowLg,border:`1px solid ${T.border}`}}>
             <h3 style={{color:T.text,fontFamily:T.fontHead,margin:"0 0 6px",fontSize:20,fontWeight:700}}>🔑 Promena lozinke</h3>
+
+            {/* Step: TOTP challenge — only shown if user has MFA enabled */}
+            {newPwData.step==="recovery-totp" && (<>
+              <p style={{color:T.textSoft,fontSize:13,margin:"0 0 8px",lineHeight:1.6}}>Vaš nalog ima uključenu dvostepenu verifikaciju.</p>
+              <p style={{color:T.textSoft,fontSize:13,margin:"0 0 20px"}}>Unesite kod iz vaše aplikacije za autentifikaciju.</p>
+              <div style={{marginBottom:16}}>
+                <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:5}}>TOTP kod</label>
+                <input value={newPwData.totpCode||""} onChange={e=>setNewPwData(d=>({...d,totpCode:e.target.value,error:""}))}
+                  placeholder="123456" maxLength={6}
+                  style={{width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"11px 14px",color:T.text,fontSize:18,fontFamily:"monospace",letterSpacing:"0.2em",boxSizing:"border-box",outline:"none",textAlign:"center"}}/>
+              </div>
+              <ErrBanner msg={newPwData.error}/>
+              <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
+                <button disabled={newPwData.loading} onClick={async()=>{
+                  if (!newPwData.totpCode) { setNewPwData(d=>({...d,error:"Unesite TOTP kod."})); return; }
+                  setNewPwData(d=>({...d,loading:true,error:""}));
+                  // Get the first TOTP factor
+                  const {data:factors} = await sb.auth.mfa.listFactors();
+                  const factor = factors?.totp?.[0];
+                  if (!factor) { setNewPwData(d=>({...d,loading:false,error:"Nije pronađen MFA faktor."})); return; }
+                  // Create challenge then verify — this elevates session to AAL2
+                  const {data:challenge,error:ce} = await sb.auth.mfa.challenge({factorId:factor.id});
+                  if (ce) { setNewPwData(d=>({...d,loading:false,error:ce.message})); return; }
+                  const {error:ve} = await sb.auth.mfa.verify({factorId:factor.id, challengeId:challenge.id, code:newPwData.totpCode});
+                  if (ve) { setNewPwData(d=>({...d,loading:false,error:"Pogrešan kod. Pokušajte ponovo."})); return; }
+                  // Session is now AAL2 — proceed to new password step
+                  setNewPwData(d=>({...d,loading:false,step:"recovery"}));
+                }} style={{...btnS("primary"),opacity:newPwData.loading?0.6:1}}>
+                  {newPwData.loading?"Proverava...":"Potvrdi →"}
+                </button>
+              </div>
+            </>)}
 
             {/* Step: enter new password — shown after clicking reset link in email */}
             {newPwData.step==="recovery" && !newPwData.success && (<>
