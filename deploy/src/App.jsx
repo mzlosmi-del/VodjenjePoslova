@@ -137,6 +137,15 @@ function ErrBanner({msg, onDismiss}) {
     </div>
   );
 }
+function SuccessBanner({msg, onDismiss}) {
+  if (!msg) return null;
+  return (
+    <div style={{background:T.greenBg,border:`1px solid ${T.greenBorder}`,borderRadius:T.radiusSm,padding:"10px 14px",color:T.green,fontSize:13,marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center",fontFamily:T.fontBody}}>
+      <span>✓ {msg}</span>
+      {onDismiss && <button onClick={onDismiss} style={{background:"none",border:"none",color:T.green,cursor:"pointer",fontSize:16}}>×</button>}
+    </div>
+  );
+}
 
 // ── stable field ──────────────────────────────────────────────────────────────
 function Field({label, value, onChange, type="text", options, readOnly, error}) {
@@ -842,46 +851,89 @@ function LoginScreen({onLogin}) {
   const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");
   const [error,setError]=useState("");
+  const [success,setSuccess]=useState("");
   const [showPw,setShowPw]=useState(false);
   const [loading,setLoading]=useState(false);
+  const [mode,setMode]=useState("login"); // "login" | "forgot"
 
   async function handleLogin() {
-    setLoading(true); setError("");
+    setLoading(true); setError(""); setSuccess("");
     const {data,error:e} = await sb.auth.signInWithPassword({email,password});
     if (e) { setError(e.message); setLoading(false); return; }
     onLogin(data.user);
   }
 
+  async function handleForgot() {
+    if (!email.trim()) { setError("Unesite email adresu."); return; }
+    setLoading(true); setError(""); setSuccess("");
+    const {error:e} = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin
+    });
+    setLoading(false);
+    if (e) { setError(e.message); return; }
+    setSuccess("Email za resetovanje lozinke je poslat. Proverite sandučić.");
+  }
+
   const inp={width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"11px 14px",color:T.text,fontSize:14,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"light"};
   return (
     <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:T.fontBody}}>
-
-      
-      
       <div style={{background:T.surface,borderRadius:T.radiusLg,padding:"40px 44px",width:400,boxShadow:T.shadowLg,border:`1px solid ${T.border}`,position:"relative"}}>
-        <div style={{marginBottom:32}}>
+        <div style={{marginBottom:28}}>
           <div style={{display:"inline-flex",alignItems:"center",gap:8,background:T.primaryLight,border:`1px solid ${T.primaryBorder}`,borderRadius:T.radius,padding:"6px 12px",marginBottom:18}}>
             <div style={{width:7,height:7,background:T.primary,borderRadius:"50%"}}/>
             <span style={{color:T.primary,fontSize:11,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase"}}>Poslovi App</span>
           </div>
-          <h1 style={{fontFamily:T.fontHead,fontSize:26,fontWeight:800,color:T.text,margin:"0 0 6px",letterSpacing:"-0.04em"}}>Dobrodošli nazad</h1>
-          <p style={{color:T.textSoft,fontSize:13,margin:0}}>Prijavite se na svoj nalog</p>
+          <h1 style={{fontFamily:T.fontHead,fontSize:26,fontWeight:800,color:T.text,margin:"0 0 6px",letterSpacing:"-0.04em"}}>
+            {mode==="login"?"Dobrodošli nazad":"Resetovanje lozinke"}
+          </h1>
+          <p style={{color:T.textSoft,fontSize:13,margin:0}}>
+            {mode==="login"?"Prijavite se na svoj nalog":"Unesite email i poslaćemo vam link za resetovanje."}
+          </p>
         </div>
+
         <div style={{marginBottom:16}}>
           <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:5}}>Email adresa</label>
-          <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&handleLogin()} style={inp} placeholder="vas@email.com"/>
+          <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setError("");setSuccess("");}}
+            onKeyDown={e=>e.key==="Enter"&&(mode==="login"?handleLogin():handleForgot())}
+            style={inp} placeholder="vas@email.com"/>
         </div>
-        <div style={{marginBottom:24}}>
-          <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:5}}>Lozinka</label>
-          <div style={{position:"relative"}}>
-            <input type={showPw?"text":"password"} value={password} onChange={e=>{setPassword(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&handleLogin()} style={{...inp,paddingRight:44}}/>
-            <button onClick={()=>setShowPw(v=>!v)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:T.textSoft,cursor:"pointer",fontSize:16}}>{showPw?"🙈":"👁"}</button>
+
+        {mode==="login" && (
+          <div style={{marginBottom:8}}>
+            <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:5}}>Lozinka</label>
+            <div style={{position:"relative"}}>
+              <input type={showPw?"text":"password"} value={password}
+                onChange={e=>{setPassword(e.target.value);setError("");}}
+                onKeyDown={e=>e.key==="Enter"&&handleLogin()}
+                style={{...inp,paddingRight:44}}/>
+              <button onClick={()=>setShowPw(v=>!v)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:T.textSoft,cursor:"pointer",fontSize:16}}>{showPw?"🙈":"👁"}</button>
+            </div>
           </div>
-        </div>
+        )}
+
+        {mode==="login" && (
+          <div style={{textAlign:"right",marginBottom:20}}>
+            <button onClick={()=>{setMode("forgot");setError("");setSuccess("");}}
+              style={{background:"none",border:"none",color:T.primary,fontSize:12,cursor:"pointer",fontFamily:T.fontBody,padding:0,textDecoration:"underline"}}>
+              Zaboravili ste lozinku?
+            </button>
+          </div>
+        )}
+
         <ErrBanner msg={error}/>
-        <button onClick={handleLogin} disabled={loading} style={{...btnS("primary"),width:"100%",padding:"13px",fontSize:14,opacity:loading?0.6:1}}>
-          {loading?"Prijavljivanje...":"Prijavi se →"}
+        <SuccessBanner msg={success}/>
+
+        <button onClick={mode==="login"?handleLogin:handleForgot} disabled={loading}
+          style={{...btnS("primary"),width:"100%",padding:"13px",fontSize:14,opacity:loading?0.6:1,marginBottom:mode==="forgot"?12:0}}>
+          {loading?(mode==="login"?"Prijavljivanje...":"Slanje..."):(mode==="login"?"Prijavi se →":"Pošalji link za reset")}
         </button>
+
+        {mode==="forgot" && (
+          <button onClick={()=>{setMode("login");setError("");setSuccess("");}}
+            style={{...btnS("ghost"),width:"100%",padding:"11px",fontSize:13,marginTop:8}}>
+            ← Nazad na prijavu
+          </button>
+        )}
       </div>
     </div>
   );
@@ -2811,6 +2863,20 @@ export default function App() {
   const [users,setUsers]             = useState([]);
   const [loading,setLoading]         = useState(false);
   const [globalErr,setGlobalErr]     = useState("");
+  const [globalSuccess,setGlobalSuccess] = useState("");
+  const [changingPassword,setChangingPassword] = useState(false);
+  const [newPwData,setNewPwData] = useState({pw:"",pw2:"",showPw:false,loading:false,error:"",success:""});
+
+  // Detect password-reset token in URL (Supabase redirects here after reset email click)
+  useEffect(()=>{
+    const hash = window.location.hash;
+    if (hash.includes("type=recovery")) {
+      // Supabase sets the session automatically from the URL hash
+      // We just need to detect it and show the change-password modal
+      const timer = setTimeout(()=>{ setChangingPassword(true); }, 800);
+      return ()=>clearTimeout(timer);
+    }
+  },[]);
 
   const [editingPosao,setEditingPosao] = useState(null);
   const [viewingPosao,setViewingPosao] = useState(null);
@@ -3211,13 +3277,14 @@ export default function App() {
 
       <div style={{maxWidth:1700,margin:"0 auto",padding:"22px 20px"}}>
         <ErrBanner msg={globalErr} onDismiss={()=>setGlobalErr("")}/>
+        <SuccessBanner msg={globalSuccess} onDismiss={()=>setGlobalSuccess("")}/>
         {loading && <Spinner/>}
 
         {!loading && <>
 
         {view==="poslovi" && <>
           <PageHeader title="Svi poslovi"/>
-          <PosaoTable rows={poslovi} viewKey="poslovi" canEdit={canEdit("poslovi")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id})} onCopy={canEdit("poslovi")?copyPosao:null} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
+          <PosaoTable rows={poslovi} viewKey="poslovi" canEdit={canEdit("poslovi")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id,label:poslovi.find(p=>p.id===id)?.Posao})} onCopy={canEdit("poslovi")?copyPosao:null} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
         {view==="aktivni" && <>
@@ -3227,7 +3294,7 @@ export default function App() {
             <StatCard label="Aktivnih" value={aktivniRows.length} color={T.amber}/>
             <StatCard label="Ukupan obračun" value={aktivniRows.reduce((s,p)=>s+(parseFloat(p.Obracun)||0),0).toLocaleString()+" RSD"} color={T.green}/>
           </div>
-          <PosaoTable rows={aktivniRows} viewKey="aktivni" canEdit={canEdit("aktivni")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id})}
+          <PosaoTable rows={aktivniRows} viewKey="aktivni" canEdit={canEdit("aktivni")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id,label:poslovi.find(p=>p.id===id)?.Posao})}
             onInlineZavrsen={canEdit("aktivni")?(id,v)=>inlineUpdate(id,"ZavrsenPosao",v):null} onCopy={canEdit("aktivni")?copyPosao:null} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
@@ -3237,7 +3304,7 @@ export default function App() {
             <StatCard label="Završenih" value={zavrseniRows.length} color={T.green}/>
             <StatCard label="Ukupan obračun" value={zavrseniRows.reduce((s,p)=>s+(parseFloat(p.Obracun)||0),0).toLocaleString()+" RSD"} color={T.primary}/>
           </div>
-          <PosaoTable rows={zavrseniRows} viewKey="zavrseni" canEdit={canEdit("zavrseni")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id})} onCopy={canEdit("zavrseni")?copyPosao:null} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
+          <PosaoTable rows={zavrseniRows} viewKey="zavrseni" canEdit={canEdit("zavrseni")} onView={setViewingPosao} onEdit={openEditPosao} onDelete={id=>setConfirmDelete({type:"posao",id,label:poslovi.find(p=>p.id===id)?.Posao})} onCopy={canEdit("zavrseni")?copyPosao:null} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
         {view==="radionica" && <>
@@ -3340,7 +3407,7 @@ export default function App() {
             }} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>
         </>}
 
-        {view==="kupci" && <KupciView kupci={kupci} canEdit={canEdit("kupci")} onNew={openNewKupac} onEdit={openEditKupac} onDelete={id=>setConfirmDelete({type:"kupac",id})} onView={setViewingKupac} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>}
+        {view==="kupci" && <KupciView kupci={kupci} canEdit={canEdit("kupci")} onNew={openNewKupac} onEdit={openEditKupac} onDelete={id=>setConfirmDelete({type:"kupac",id,label:kupci.find(k=>k.id===id)?.Naziv})} onView={setViewingKupac} currentUser={authUser} canPublishLayouts={profile?.can_publish_layouts||profile?.is_admin}/>}
 
         {view==="obracun" && <ObracunView poslovi={poslovi} placanjeColor={placanjeColor}/>}
 
@@ -3515,11 +3582,55 @@ export default function App() {
               </div>
             </label>
           </div>
-          <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:20,borderTop:`1px solid ${T.border}`,paddingTop:16}}>
+          <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:20,borderTop:`1px solid ${T.border}`,paddingTop:16,flexWrap:"wrap"}}>
+            {editingUser===authUser?.id && (
+              <button onClick={()=>{closeModal();setChangingPassword(true);}}
+                style={{...btnS("ghost"),marginRight:"auto",color:T.primary,borderColor:T.primaryBorder}}>
+                🔑 Promeni lozinku
+              </button>
+            )}
             <button onClick={closeModal} style={btnS("ghost")}>Otkaži</button>
             <button onClick={saveUser} disabled={saving} style={{...btnS("primary"),opacity:saving?0.6:1}}>{saving?"Snima...":"Sačuvaj"}</button>
           </div>
         </Modal>
+      )}
+
+      {changingPassword && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2100,backdropFilter:"blur(6px)",padding:16}}>
+          <div style={{background:T.surface,borderRadius:T.radiusLg,padding:"36px 40px",maxWidth:420,width:"100%",boxShadow:T.shadowLg,border:`1px solid ${T.border}`}}>
+            <h3 style={{color:T.text,fontFamily:T.fontHead,margin:"0 0 6px",fontSize:20,fontWeight:700}}>🔑 Promena lozinke</h3>
+            <p style={{color:T.textSoft,fontSize:13,margin:"0 0 22px"}}>Unesite novu lozinku za vaš nalog.</p>
+            {[["Nova lozinka","pw"],["Potvrdi lozinku","pw2"]].map(([lbl,key])=>(
+              <div key={key} style={{marginBottom:16}}>
+                <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:5}}>{lbl}</label>
+                <div style={{position:"relative"}}>
+                  <input
+                    type={newPwData.showPw?"text":"password"}
+                    value={newPwData[key]}
+                    onChange={e=>setNewPwData(d=>({...d,[key]:e.target.value,error:"",success:""}))}
+                    style={{width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"11px 44px 11px 14px",color:T.text,fontSize:14,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"light"}}/>
+                  {key==="pw" && <button onClick={()=>setNewPwData(d=>({...d,showPw:!d.showPw}))} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:T.textSoft,cursor:"pointer",fontSize:16}}>{newPwData.showPw?"🙈":"👁"}</button>}
+                </div>
+              </div>
+            ))}
+            <ErrBanner msg={newPwData.error}/>
+            <SuccessBanner msg={newPwData.success}/>
+            <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
+              <button onClick={()=>{setChangingPassword(false);setNewPwData({pw:"",pw2:"",showPw:false,loading:false,error:"",success:""});window.location.hash="";}} style={btnS("ghost")}>Zatvori</button>
+              <button disabled={newPwData.loading} onClick={async()=>{
+                if (newPwData.pw.length < 6) { setNewPwData(d=>({...d,error:"Lozinka mora imati najmanje 6 karaktera."})); return; }
+                if (newPwData.pw !== newPwData.pw2) { setNewPwData(d=>({...d,error:"Lozinke se ne poklapaju."})); return; }
+                setNewPwData(d=>({...d,loading:true,error:"",success:""}));
+                const {error:e} = await sb.auth.updateUser({password:newPwData.pw});
+                if (e) { setNewPwData(d=>({...d,loading:false,error:e.message})); return; }
+                setNewPwData(d=>({...d,loading:false,success:"Lozinka je uspešno promenjena!"}));
+                setTimeout(()=>{setChangingPassword(false);setNewPwData({pw:"",pw2:"",showPw:false,loading:false,error:"",success:""});window.location.hash="";},1800);
+              }} style={{...btnS("primary"),opacity:newPwData.loading?0.6:1}}>
+                {newPwData.loading?"Menja...":"Sačuvaj lozinku"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {confirmDelete && (
@@ -3527,7 +3638,8 @@ export default function App() {
           <div style={{background:T.surface,borderRadius:T.radiusLg,padding:"32px 28px",maxWidth:380,width:"100%",boxShadow:T.shadowLg,border:`1px solid ${T.border}`,textAlign:"center"}}>
             <div style={{width:48,height:48,background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",fontSize:20}}>🗑</div>
             <h3 style={{color:T.text,fontFamily:T.fontHead,margin:"0 0 8px",fontSize:18,fontWeight:700}}>Potvrda brisanja</h3>
-            <p style={{color:T.textMid,fontSize:13,margin:"0 0 22px",lineHeight:1.6}}>Da li ste sigurni? Ova akcija se ne može poništiti.</p>
+            <p style={{color:T.textMid,fontSize:13,margin:"0 0 6px",lineHeight:1.6}}>Da li ste sigurni? Ova akcija se ne može poništiti.</p>
+            {confirmDelete?.label && <p style={{color:T.text,fontWeight:600,fontSize:14,margin:"0 0 18px",background:T.redBg,border:`1px solid ${T.redBorder}`,borderRadius:T.radiusSm,padding:"7px 12px",display:"inline-block"}}>{confirmDelete.label}</p>}
             <div style={{display:"flex",gap:10,justifyContent:"center"}}>
               <button onClick={()=>setConfirmDelete(null)} style={btnS("ghost")}>Otkaži</button>
               <button onClick={confirmDeleteAction} style={{...btnS("primary"),background:T.red}}>Obriši</button>
