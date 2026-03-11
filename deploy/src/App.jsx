@@ -2867,16 +2867,7 @@ export default function App() {
   const [changingPassword,setChangingPassword] = useState(false);
   const [newPwData,setNewPwData] = useState({step:"reauth",currentPw:"",pw:"",pw2:"",showPw:false,showCurrent:false,loading:false,error:"",success:""});
 
-  // Detect password-reset token in URL (Supabase redirects here after reset email click)
-  useEffect(()=>{
-    const hash = window.location.hash;
-    if (hash.includes("type=recovery")) {
-      // Supabase sets the session automatically from the URL hash
-      // We just need to detect it and show the change-password modal
-      const timer = setTimeout(()=>{ setChangingPassword(true); }, 800);
-      return ()=>clearTimeout(timer);
-    }
-  },[]);
+  // Recovery detection is handled in onAuthStateChange below (PASSWORD_RECOVERY event)
 
   const [editingPosao,setEditingPosao] = useState(null);
   const [viewingPosao,setViewingPosao] = useState(null);
@@ -2896,7 +2887,15 @@ export default function App() {
       if (session?.user) { setAuthUser(session.user); loadProfile(session.user.id); }
       else setAuthLoading(false);
     });
-    const {data:{subscription}} = sb.auth.onAuthStateChange((_e,session)=>{
+    const {data:{subscription}} = sb.auth.onAuthStateChange((event,session)=>{
+      if (event==="PASSWORD_RECOVERY") {
+        // User clicked the reset link in their email — show the new-password form
+        setAuthUser(session.user);
+        setNewPwData(d=>({...d,step:"recovery"}));
+        setChangingPassword(true);
+        loadProfile(session.user.id);
+        return;
+      }
       if (session?.user) { setAuthUser(session.user); loadProfile(session.user.id); }
       else { setAuthUser(null); setProfile(null); setAuthLoading(false); }
     });
@@ -3599,7 +3598,49 @@ export default function App() {
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2100,backdropFilter:"blur(6px)",padding:16}}>
           <div style={{background:T.surface,borderRadius:T.radiusLg,padding:"36px 40px",maxWidth:420,width:"100%",boxShadow:T.shadowLg,border:`1px solid ${T.border}`}}>
             <h3 style={{color:T.text,fontFamily:T.fontHead,margin:"0 0 6px",fontSize:20,fontWeight:700}}>🔑 Promena lozinke</h3>
-            {!newPwData.success ? (<>
+
+            {/* Step: enter new password — shown after clicking reset link in email */}
+            {newPwData.step==="recovery" && !newPwData.success && (<>
+              <p style={{color:T.textSoft,fontSize:13,margin:"0 0 22px"}}>Unesite novu lozinku za vaš nalog.</p>
+              {[["Nova lozinka","pw"],["Potvrdi lozinku","pw2"]].map(([lbl,key])=>(
+                <div key={key} style={{marginBottom:16}}>
+                  <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:5}}>{lbl}</label>
+                  <div style={{position:"relative"}}>
+                    <input type={newPwData.showPw?"text":"password"} value={newPwData[key]}
+                      onChange={e=>setNewPwData(d=>({...d,[key]:e.target.value,error:"",success:""}))}
+                      style={{width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"11px 44px 11px 14px",color:T.text,fontSize:14,fontFamily:T.fontBody,boxSizing:"border-box",outline:"none",colorScheme:"light"}}/>
+                    {key==="pw" && <button onClick={()=>setNewPwData(d=>({...d,showPw:!d.showPw}))} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:T.textSoft,cursor:"pointer",fontSize:16}}>{newPwData.showPw?"🙈":"👁"}</button>}
+                  </div>
+                </div>
+              ))}
+              <ErrBanner msg={newPwData.error}/>
+              <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
+                <button disabled={newPwData.loading} onClick={async()=>{
+                  if (newPwData.pw.length < 6) { setNewPwData(d=>({...d,error:"Lozinka mora imati najmanje 6 karaktera."})); return; }
+                  if (newPwData.pw !== newPwData.pw2) { setNewPwData(d=>({...d,error:"Lozinke se ne poklapaju."})); return; }
+                  setNewPwData(d=>({...d,loading:true,error:""}));
+                  const {error:e} = await sb.auth.updateUser({password:newPwData.pw});
+                  if (e) { setNewPwData(d=>({...d,loading:false,error:e.message})); return; }
+                  setNewPwData(d=>({...d,loading:false,success:"Lozinka je uspešno promenjena!"}));
+                  setTimeout(()=>{setChangingPassword(false);setNewPwData({step:"reauth",currentPw:"",pw:"",pw2:"",showPw:false,showCurrent:false,loading:false,error:"",success:""});},1800);
+                }} style={{...btnS("primary"),opacity:newPwData.loading?0.6:1}}>
+                  {newPwData.loading?"Menja...":"Sačuvaj lozinku"}
+                </button>
+              </div>
+            </>)}
+
+            {/* Step: success after recovery */}
+            {newPwData.step==="recovery" && newPwData.success && (
+              <div style={{textAlign:"center",padding:"16px 0"}}>
+                <div style={{fontSize:40,marginBottom:12}}>✅</div>
+                <p style={{color:T.green,fontWeight:600,fontSize:15,margin:"0 0 8px"}}>Lozinka je promenjena!</p>
+                <p style={{color:T.textSoft,fontSize:13,margin:"0 0 22px"}}>Možete nastaviti sa radom.</p>
+                <button onClick={()=>{setChangingPassword(false);setNewPwData({step:"reauth",currentPw:"",pw:"",pw2:"",showPw:false,showCurrent:false,loading:false,error:"",success:""});}} style={btnS("primary")}>Nastavi</button>
+              </div>
+            )}
+
+            {/* Step: send reset email — triggered manually from profile */}
+            {newPwData.step!=="recovery" && !newPwData.success && (<>
               <p style={{color:T.textSoft,fontSize:13,margin:"0 0 22px",lineHeight:1.6}}>
                 Poslaćemo email na <strong style={{color:T.text}}>{authUser?.email}</strong> sa linkom za postavljanje nove lozinke.
               </p>
@@ -3615,7 +3656,10 @@ export default function App() {
                   {newPwData.loading?"Šalje...":"Pošalji link →"}
                 </button>
               </div>
-            </>) : (<>
+            </>)}
+
+            {/* Step: email sent confirmation */}
+            {newPwData.step!=="recovery" && newPwData.success && (
               <div style={{textAlign:"center",padding:"16px 0"}}>
                 <div style={{fontSize:40,marginBottom:12}}>📬</div>
                 <p style={{color:T.green,fontWeight:600,fontSize:15,margin:"0 0 8px"}}>Email je poslat!</p>
@@ -3624,7 +3668,7 @@ export default function App() {
                 </p>
                 <button onClick={()=>{setChangingPassword(false);setNewPwData({step:"reauth",currentPw:"",pw:"",pw2:"",showPw:false,showCurrent:false,loading:false,error:"",success:""});}} style={btnS("ghost")}>Zatvori</button>
               </div>
-            </>)}
+            )}
           </div>
         </div>
       )}
