@@ -3619,14 +3619,13 @@ export default function App() {
                   if (!newPwData.totpCode) { setNewPwData(d=>({...d,error:"Unesite TOTP kod."})); return; }
                   setNewPwData(d=>({...d,loading:true,error:""}));
                   // Get the first TOTP factor
-                  const {data:factors} = await sb.auth.mfa.listFactors();
-                  const factor = factors?.totp?.[0];
-                  if (!factor) { setNewPwData(d=>({...d,loading:false,error:"Nije pronađen MFA faktor."})); return; }
-                  // Create challenge then verify — this elevates session to AAL2
-                  const {data:challenge,error:ce} = await sb.auth.mfa.challenge({factorId:factor.id});
-                  if (ce) { setNewPwData(d=>({...d,loading:false,error:ce.message})); return; }
-                  const {error:ve} = await sb.auth.mfa.verify({factorId:factor.id, challengeId:challenge.id, code:newPwData.totpCode});
-                  if (ve) { setNewPwData(d=>({...d,loading:false,error:"Pogrešan kod. Pokušajte ponovo."})); return; }
+                  const {data:factors, error:fe} = await sb.auth.mfa.listFactors();
+                  if (fe) { setNewPwData(d=>({...d,loading:false,error:"Greška: "+fe.message})); return; }
+                  const factor = factors?.totp?.[0] || factors?.all?.[0];
+                  if (!factor) { setNewPwData(d=>({...d,loading:false,error:"Nije pronađen MFA faktor. Faktori: "+JSON.stringify(factors)})); return; }
+                  // challengeAndVerify in one step — elevates session to AAL2
+                  const {error:ve} = await sb.auth.mfa.challengeAndVerify({factorId:factor.id, code:newPwData.totpCode.trim()});
+                  if (ve) { setNewPwData(d=>({...d,loading:false,error:"Pogrešan kod: "+ve.message})); return; }
                   // Session is now AAL2 — proceed to new password step
                   setNewPwData(d=>({...d,loading:false,step:"recovery"}));
                 }} style={{...btnS("primary"),opacity:newPwData.loading?0.6:1}}>
