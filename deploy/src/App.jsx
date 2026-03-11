@@ -3603,35 +3603,47 @@ export default function App() {
           <div style={{background:T.surface,borderRadius:T.radiusLg,padding:"36px 40px",maxWidth:420,width:"100%",boxShadow:T.shadowLg,border:`1px solid ${T.border}`}}>
             <h3 style={{color:T.text,fontFamily:T.fontHead,margin:"0 0 6px",fontSize:20,fontWeight:700}}>🔑 Promena lozinke</h3>
 
-            {/* Step: TOTP challenge — only shown if user has MFA enabled */}
+            {/* Step: email OTP reauth — only shown if user has MFA enabled */}
             {newPwData.step==="recovery-totp" && (<>
-              <p style={{color:T.textSoft,fontSize:13,margin:"0 0 8px",lineHeight:1.6}}>Vaš nalog ima uključenu dvostepenu verifikaciju.</p>
-              <p style={{color:T.textSoft,fontSize:13,margin:"0 0 20px"}}>Unesite kod iz vaše aplikacije za autentifikaciju.</p>
-              <div style={{marginBottom:16}}>
-                <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:5}}>TOTP kod</label>
-                <input value={newPwData.totpCode||""} onChange={e=>setNewPwData(d=>({...d,totpCode:e.target.value,error:""}))}
-                  placeholder="123456" maxLength={6}
-                  style={{width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"11px 14px",color:T.text,fontSize:18,fontFamily:"monospace",letterSpacing:"0.2em",boxSizing:"border-box",outline:"none",textAlign:"center"}}/>
-              </div>
-              <ErrBanner msg={newPwData.error}/>
-              <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
-                <button disabled={newPwData.loading} onClick={async()=>{
-                  if (!newPwData.totpCode) { setNewPwData(d=>({...d,error:"Unesite TOTP kod."})); return; }
-                  setNewPwData(d=>({...d,loading:true,error:""}));
-                  // Get the first TOTP factor
-                  const {data:factors, error:fe} = await sb.auth.mfa.listFactors();
-                  if (fe) { setNewPwData(d=>({...d,loading:false,error:"Greška: "+fe.message})); return; }
-                  const factor = factors?.totp?.[0] || factors?.all?.[0];
-                  if (!factor) { setNewPwData(d=>({...d,loading:false,error:"Nije pronađen MFA faktor. Faktori: "+JSON.stringify(factors)})); return; }
-                  // challengeAndVerify in one step — elevates session to AAL2
-                  const {error:ve} = await sb.auth.mfa.challengeAndVerify({factorId:factor.id, code:newPwData.totpCode.trim()});
-                  if (ve) { setNewPwData(d=>({...d,loading:false,error:"Pogrešan kod: "+ve.message})); return; }
-                  // Session is now AAL2 — proceed to new password step
-                  setNewPwData(d=>({...d,loading:false,step:"recovery"}));
-                }} style={{...btnS("primary"),opacity:newPwData.loading?0.6:1}}>
-                  {newPwData.loading?"Proverava...":"Potvrdi →"}
-                </button>
-              </div>
+              {!newPwData.otpSent ? (<>
+                <p style={{color:T.textSoft,fontSize:13,margin:"0 0 22px",lineHeight:1.6}}>
+                  Vaš nalog ima uključenu dvostepenu verifikaciju. Poslaćemo jednokratni kod na <strong style={{color:T.text}}>{authUser?.email}</strong> za potvrdu identiteta.
+                </p>
+                <ErrBanner msg={newPwData.error}/>
+                <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
+                  <button disabled={newPwData.loading} onClick={async()=>{
+                    setNewPwData(d=>({...d,loading:true,error:""}));
+                    const {error:e} = await sb.auth.reauthenticate();
+                    if (e) { setNewPwData(d=>({...d,loading:false,error:e.message})); return; }
+                    setNewPwData(d=>({...d,loading:false,otpSent:true}));
+                  }} style={{...btnS("primary"),opacity:newPwData.loading?0.6:1}}>
+                    {newPwData.loading?"Šalje...":"Pošalji kod →"}
+                  </button>
+                </div>
+              </>) : (<>
+                <p style={{color:T.textSoft,fontSize:13,margin:"0 0 20px",lineHeight:1.6}}>
+                  Unesite kod koji smo poslali na <strong style={{color:T.text}}>{authUser?.email}</strong>.
+                </p>
+                <div style={{marginBottom:16}}>
+                  <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:5}}>Jednokratni kod</label>
+                  <input value={newPwData.totpCode||""} onChange={e=>setNewPwData(d=>({...d,totpCode:e.target.value,error:""}))}
+                    placeholder="123456" maxLength={6}
+                    style={{width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"11px 14px",color:T.text,fontSize:22,fontFamily:"monospace",letterSpacing:"0.25em",boxSizing:"border-box",outline:"none",textAlign:"center",colorScheme:"light"}}/>
+                </div>
+                <ErrBanner msg={newPwData.error}/>
+                <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
+                  <button onClick={()=>setNewPwData(d=>({...d,otpSent:false,totpCode:"",error:""}))} style={btnS("ghost")}>← Nazad</button>
+                  <button disabled={newPwData.loading} onClick={async()=>{
+                    if (!newPwData.totpCode) { setNewPwData(d=>({...d,error:"Unesite kod."})); return; }
+                    setNewPwData(d=>({...d,loading:true,error:""}));
+                    const {error:ve} = await sb.auth.verifyOtp({email:authUser.email, token:newPwData.totpCode.trim(), type:"reauthentication"});
+                    if (ve) { setNewPwData(d=>({...d,loading:false,error:"Pogrešan kod: "+ve.message})); return; }
+                    setNewPwData(d=>({...d,loading:false,step:"recovery"}));
+                  }} style={{...btnS("primary"),opacity:newPwData.loading?0.6:1}}>
+                    {newPwData.loading?"Proverava...":"Potvrdi →"}
+                  </button>
+                </div>
+              </>)}
             </>)}
 
             {/* Step: enter new password — shown after clicking reset link in email */}
