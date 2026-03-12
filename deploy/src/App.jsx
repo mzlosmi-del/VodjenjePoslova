@@ -3602,52 +3602,7 @@ export default function App() {
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2100,backdropFilter:"blur(6px)",padding:16}}>
           <div style={{background:T.surface,borderRadius:T.radiusLg,padding:"36px 40px",maxWidth:420,width:"100%",boxShadow:T.shadowLg,border:`1px solid ${T.border}`}}>
             <h3 style={{color:T.text,fontFamily:T.fontHead,margin:"0 0 6px",fontSize:20,fontWeight:700}}>🔑 Promena lozinke</h3>
-
-            {/* Step: email OTP reauth — only shown if user has MFA enabled */}
-            {newPwData.step==="recovery-totp" && (<>
-              {!newPwData.otpSent ? (<>
-                <p style={{color:T.textSoft,fontSize:13,margin:"0 0 22px",lineHeight:1.6}}>
-                  Vaš nalog ima uključenu dvostepenu verifikaciju. Poslaćemo jednokratni kod na <strong style={{color:T.text}}>{authUser?.email}</strong> za potvrdu identiteta.
-                </p>
-                <ErrBanner msg={newPwData.error}/>
-                <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
-                  <button disabled={newPwData.loading} onClick={async()=>{
-                    setNewPwData(d=>({...d,loading:true,error:""}));
-                    const {error:e} = await sb.auth.reauthenticate();
-                    if (e) { setNewPwData(d=>({...d,loading:false,error:e.message})); return; }
-                    setNewPwData(d=>({...d,loading:false,otpSent:true}));
-                  }} style={{...btnS("primary"),opacity:newPwData.loading?0.6:1}}>
-                    {newPwData.loading?"Šalje...":"Pošalji kod →"}
-                  </button>
-                </div>
-              </>) : (<>
-                <p style={{color:T.textSoft,fontSize:13,margin:"0 0 20px",lineHeight:1.6}}>
-                  Unesite kod koji smo poslali na <strong style={{color:T.text}}>{authUser?.email}</strong>.
-                </p>
-                <div style={{marginBottom:16}}>
-                  <label style={{display:"block",color:T.textMid,fontSize:12,fontWeight:500,marginBottom:5}}>Jednokratni kod</label>
-                  <input value={newPwData.totpCode||""} onChange={e=>setNewPwData(d=>({...d,totpCode:e.target.value,error:""}))}
-                    placeholder="123456" maxLength={6}
-                    style={{width:"100%",background:T.surfaceRaised,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:"11px 14px",color:T.text,fontSize:22,fontFamily:"monospace",letterSpacing:"0.25em",boxSizing:"border-box",outline:"none",textAlign:"center",colorScheme:"light"}}/>
-                </div>
-                <ErrBanner msg={newPwData.error}/>
-                <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
-                  <button onClick={()=>setNewPwData(d=>({...d,otpSent:false,totpCode:"",error:""}))} style={btnS("ghost")}>← Nazad</button>
-                  <button disabled={newPwData.loading} onClick={async()=>{
-                    if (!newPwData.totpCode) { setNewPwData(d=>({...d,error:"Unesite kod."})); return; }
-                    setNewPwData(d=>({...d,loading:true,error:""}));
-                    const {error:ve} = await sb.auth.verifyOtp({email:authUser.email, token:newPwData.totpCode.trim(), type:"reauthentication"});
-                    if (ve) { setNewPwData(d=>({...d,loading:false,error:"Pogrešan kod: "+ve.message})); return; }
-                    setNewPwData(d=>({...d,loading:false,step:"recovery"}));
-                  }} style={{...btnS("primary"),opacity:newPwData.loading?0.6:1}}>
-                    {newPwData.loading?"Proverava...":"Potvrdi →"}
-                  </button>
-                </div>
-              </>)}
-            </>)}
-
-            {/* Step: enter new password — shown after clicking reset link in email */}
-            {newPwData.step==="recovery" && !newPwData.success && (<>
+            {!newPwData.success ? (<>
               <p style={{color:T.textSoft,fontSize:13,margin:"0 0 22px"}}>Unesite novu lozinku za vaš nalog.</p>
               {[["Nova lozinka","pw"],["Potvrdi lozinku","pw2"]].map(([lbl,key])=>(
                 <div key={key} style={{marginBottom:16}}>
@@ -3662,6 +3617,7 @@ export default function App() {
               ))}
               <ErrBanner msg={newPwData.error}/>
               <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
+                <button onClick={()=>{setChangingPassword(false);setNewPwData({step:"idle",pw:"",pw2:"",showPw:false,loading:false,error:"",success:""});}} style={btnS("ghost")}>Otkaži</button>
                 <button disabled={newPwData.loading} onClick={async()=>{
                   if (newPwData.pw.length < 6) { setNewPwData(d=>({...d,error:"Lozinka mora imati najmanje 6 karaktera."})); return; }
                   if (newPwData.pw !== newPwData.pw2) { setNewPwData(d=>({...d,error:"Lozinke se ne poklapaju."})); return; }
@@ -3669,51 +3625,17 @@ export default function App() {
                   const {error:e} = await sb.auth.updateUser({password:newPwData.pw});
                   if (e) { setNewPwData(d=>({...d,loading:false,error:e.message})); return; }
                   setNewPwData(d=>({...d,loading:false,success:"Lozinka je uspešno promenjena!"}));
-                  setTimeout(()=>{setChangingPassword(false);setNewPwData({step:"reauth",currentPw:"",pw:"",pw2:"",showPw:false,showCurrent:false,loading:false,error:"",success:""});},1800);
+                  setTimeout(()=>{setChangingPassword(false);setNewPwData({step:"idle",pw:"",pw2:"",showPw:false,loading:false,error:"",success:""});},1800);
                 }} style={{...btnS("primary"),opacity:newPwData.loading?0.6:1}}>
                   {newPwData.loading?"Menja...":"Sačuvaj lozinku"}
                 </button>
               </div>
-            </>)}
-
-            {/* Step: success after recovery */}
-            {newPwData.step==="recovery" && newPwData.success && (
+            </>) : (
               <div style={{textAlign:"center",padding:"16px 0"}}>
                 <div style={{fontSize:40,marginBottom:12}}>✅</div>
                 <p style={{color:T.green,fontWeight:600,fontSize:15,margin:"0 0 8px"}}>Lozinka je promenjena!</p>
                 <p style={{color:T.textSoft,fontSize:13,margin:"0 0 22px"}}>Možete nastaviti sa radom.</p>
-                <button onClick={()=>{setChangingPassword(false);setNewPwData({step:"reauth",currentPw:"",pw:"",pw2:"",showPw:false,showCurrent:false,loading:false,error:"",success:""});}} style={btnS("primary")}>Nastavi</button>
-              </div>
-            )}
-
-            {/* Step: send reset email — triggered manually from profile */}
-            {newPwData.step!=="recovery" && !newPwData.success && (<>
-              <p style={{color:T.textSoft,fontSize:13,margin:"0 0 22px",lineHeight:1.6}}>
-                Poslaćemo email na <strong style={{color:T.text}}>{authUser?.email}</strong> sa linkom za postavljanje nove lozinke.
-              </p>
-              <ErrBanner msg={newPwData.error}/>
-              <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
-                <button onClick={()=>{setChangingPassword(false);setNewPwData({step:"reauth",currentPw:"",pw:"",pw2:"",showPw:false,showCurrent:false,loading:false,error:"",success:""});}} style={btnS("ghost")}>Otkaži</button>
-                <button disabled={newPwData.loading} onClick={async()=>{
-                  setNewPwData(d=>({...d,loading:true,error:""}));
-                  const {error:e} = await sb.auth.resetPasswordForEmail(authUser.email, {redirectTo: window.location.origin});
-                  if (e) { setNewPwData(d=>({...d,loading:false,error:e.message})); return; }
-                  setNewPwData(d=>({...d,loading:false,success:"Email je poslat!"}));
-                }} style={{...btnS("primary"),opacity:newPwData.loading?0.6:1}}>
-                  {newPwData.loading?"Šalje...":"Pošalji link →"}
-                </button>
-              </div>
-            </>)}
-
-            {/* Step: email sent confirmation */}
-            {newPwData.step!=="recovery" && newPwData.success && (
-              <div style={{textAlign:"center",padding:"16px 0"}}>
-                <div style={{fontSize:40,marginBottom:12}}>📬</div>
-                <p style={{color:T.green,fontWeight:600,fontSize:15,margin:"0 0 8px"}}>Email je poslat!</p>
-                <p style={{color:T.textSoft,fontSize:13,margin:"0 0 22px",lineHeight:1.6}}>
-                  Proverite sandučić na <strong style={{color:T.text}}>{authUser?.email}</strong>. Kliknite na link u emailu da postavite novu lozinku.
-                </p>
-                <button onClick={()=>{setChangingPassword(false);setNewPwData({step:"reauth",currentPw:"",pw:"",pw2:"",showPw:false,showCurrent:false,loading:false,error:"",success:""});}} style={btnS("ghost")}>Zatvori</button>
+                <button onClick={()=>{setChangingPassword(false);setNewPwData({step:"idle",pw:"",pw2:"",showPw:false,loading:false,error:"",success:""});}} style={btnS("primary")}>Nastavi</button>
               </div>
             )}
           </div>
